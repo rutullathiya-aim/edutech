@@ -65,7 +65,10 @@ class Profile extends Component
             $timeout = (int) config('auth.password_timeout', 900);
 
             if ($confirmedAt > $timeout) {
-                abort(403, 'Password confirmation required to change email or mobile number.');
+                session()->put('url.intended', route('profile.edit'));
+                $this->redirect(route('password.confirm'));
+
+                return;
             }
         }
 
@@ -119,7 +122,7 @@ class Profile extends Component
     {
         $user = Auth::user();
 
-        if ($user->hasActiveMemberships()) {
+        if ($user->hasAnyMembership()) {
             return false;
         }
 

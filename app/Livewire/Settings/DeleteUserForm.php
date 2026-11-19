@@ -20,8 +20,8 @@ class DeleteUserForm extends Component
     {
         $user = Auth::user();
 
-        if ($user->hasActiveMemberships()) {
-            abort(403, 'Users with active school memberships cannot delete their accounts.');
+        if ($user->hasAnyMembership()) {
+            abort(403, 'Users with school memberships cannot delete their accounts.');
         }
 
         $this->validate([

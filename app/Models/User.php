@@ -4,7 +4,7 @@ namespace App\Models;
 
 use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
-use App\Enums\MembershipStatus;
+use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -121,12 +121,20 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
-     * Determine if the user has any active school memberships.
+     * Determine if the user has any school memberships (active or disabled).
      */
-    public function hasActiveMemberships(): bool
+    public function hasAnyMembership(): bool
     {
-        return $this->memberships()
-            ->where('status', MembershipStatus::Active)
-            ->exists();
+        return $this->memberships()->exists();
+    }
+
+    /**
+     * Send the password reset notification.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 }

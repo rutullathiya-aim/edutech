@@ -187,20 +187,20 @@ class ProfileUpdateTest extends TestCase
 
         $this->assertEquals('Changed Name', $user->fresh()->name);
 
-        // Attempting to change email without password confirmation is refused
+        // Attempting to change email without password confirmation redirects to password confirmation
         $responseEmail = Livewire::test(Profile::class)
             ->set('email', 'new-email@example.com')
             ->call('updateProfileInformation');
 
-        $responseEmail->assertStatus(403);
+        $responseEmail->assertRedirect(route('password.confirm'));
         $this->assertEquals('original@example.com', $user->fresh()->email);
 
-        // Attempting to change mobile without password confirmation is refused
+        // Attempting to change mobile without password confirmation redirects to password confirmation
         $responseMobile = Livewire::test(Profile::class)
             ->set('mobile', '9876543299')
             ->call('updateProfileInformation');
 
-        $responseMobile->assertStatus(403);
+        $responseMobile->assertRedirect(route('password.confirm'));
         $this->assertEquals('+919876543210', $user->fresh()->mobile);
     }
 
@@ -260,6 +260,35 @@ class ProfileUpdateTest extends TestCase
         $this->assertNotNull($user->fresh());
         $this->assertNotNull($membership->fresh());
         expect($user->hasRole(SchoolRole::Teacher))->toBeTrue();
+
+        // Profile view property hides the delete form
+        $profile = Livewire::test(Profile::class);
+        $this->assertFalse($profile->instance()->showDeleteUser());
+    }
+
+    public function test_user_with_only_a_disabled_membership_cannot_delete_their_account(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $school = School::factory()->create();
+        $user = User::factory()->create();
+
+        $membership = Membership::factory()->disabled()->create([
+            'school_id' => $school->id,
+            'user_id' => $user->id,
+        ]);
+
+        $this->actingAs($user);
+
+        // Form refuses deletion
+        $response = Livewire::test('settings.delete-user-form')
+            ->set('password', 'password')
+            ->call('deleteUser');
+
+        $response->assertStatus(403);
+
+        $this->assertNotNull($user->fresh());
+        $this->assertNotNull($membership->fresh());
 
         // Profile view property hides the delete form
         $profile = Livewire::test(Profile::class);
