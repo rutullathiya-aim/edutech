@@ -38,16 +38,14 @@ class AppServiceProvider extends ServiceProvider
             SetCurrentSchool::class,
         ]);
 
-        View::composer('*', function ($view): void {
-            if (! isset($view->getData()['dashboardUrl'])) {
-                $dashboardUrl = CurrentSchool::check()
-                    ? route('dashboard', ['school' => CurrentSchool::idOrFail()])
-                    : (auth()->user()?->defaultSchool()
-                        ? route('dashboard', ['school' => auth()->user()->defaultSchool()->id])
-                        : url('/'));
+        View::composer(['*app.sidebar', '*app.header', 'welcome'], function ($view): void {
+            $dashboardUrl = CurrentSchool::check()
+                ? route('dashboard', ['school' => CurrentSchool::idOrFail()])
+                : (auth()->user()?->defaultSchool()
+                    ? route('dashboard', ['school' => auth()->user()->defaultSchool()->id])
+                    : url('/'));
 
-                $view->with('dashboardUrl', $dashboardUrl);
-            }
+            $view->with('dashboardUrl', $dashboardUrl);
         });
     }
 

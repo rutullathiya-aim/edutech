@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Settings;
 
+use App\Enums\MembershipStatus;
 use App\Enums\SchoolRole;
+use App\Enums\SchoolStatus;
 use App\Livewire\Settings\Profile;
 use App\Models\Membership;
 use App\Models\School;
@@ -10,6 +12,7 @@ use App\Models\User;
 use App\Notifications\EmailChangedNotification;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -23,6 +26,28 @@ class ProfileUpdateTest extends TestCase
         $this->actingAs($user = User::factory()->create());
 
         $this->get('/settings/profile')->assertOk();
+    }
+
+    public function test_loading_profile_page_runs_active_schools_query_at_most_once(): void
+    {
+        $school = School::factory()->create(['status' => SchoolStatus::Active]);
+        $user = User::factory()->create();
+
+        Membership::factory()->create([
+            'school_id' => $school->id,
+            'user_id' => $user->id,
+            'status' => MembershipStatus::Active,
+        ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->actingAs($user)->get('/settings/profile')->assertOk();
+
+        $activeSchoolQueries = collect(DB::getQueryLog())
+            ->filter(fn (array $query) => str_contains($query['query'], 'schools') && str_contains($query['query'], 'memberships'));
+
+        $this->assertSame(1, $activeSchoolQueries->count());
     }
 
     public function test_profile_information_can_be_updated(): void

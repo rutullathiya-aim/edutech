@@ -181,7 +181,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
      */
     public function defaultSchool(): ?School
     {
-        return $this->activeSchools()->first();
+        return once(fn () => $this->activeSchools()->first());
     }
 
     /**

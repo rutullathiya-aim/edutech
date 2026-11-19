@@ -11,7 +11,6 @@ use App\Models\School;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Database\Seeders\RoleSeeder;
-use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -196,7 +195,7 @@ test('visiting tenant route with active school and membership sets CurrentSchool
             'default_route' => route('dashboard'),
         ]);
     })->whereUlid('school')
-        ->middleware(['auth', 'verified', SetCurrentSchool::class]);
+        ->middleware(['web', 'auth', 'verified', SetCurrentSchool::class]);
 
     $school = School::factory()->create([
         'status' => SchoolStatus::Active,
@@ -234,7 +233,7 @@ test('route model binding on school-scoped records loads own school record with 
     Route::get('{school}/test-invitations/{invitation}', function (School $school, Invitation $invitation) {
         return response()->json(['id' => $invitation->id]);
     })->whereUlid('school')
-        ->middleware(['auth', 'verified', SetCurrentSchool::class, SubstituteBindings::class]);
+        ->middleware(['web', 'auth', 'verified', SetCurrentSchool::class]);
 
     $schoolA = School::factory()->create(['status' => SchoolStatus::Active]);
     $schoolB = School::factory()->create(['status' => SchoolStatus::Active]);
@@ -307,7 +306,7 @@ test('roles follow the URL across multiple schools', function () {
             'is_parent' => auth()->user()?->hasRole(SchoolRole::Parent->value),
         ]);
     })->whereUlid('school')
-        ->middleware(['auth', 'verified', SetCurrentSchool::class]);
+        ->middleware(['web', 'auth', 'verified', SetCurrentSchool::class]);
 
     $schoolA = School::factory()->create(['status' => SchoolStatus::Active]);
     $schoolB = School::factory()->create(['status' => SchoolStatus::Active]);
