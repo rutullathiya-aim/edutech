@@ -207,7 +207,7 @@ test('User::activeSchools excludes suspended, cancelled, expired-trial, soft-del
     ]);
     Membership::factory()->create(['user_id' => $user->id, 'school_id' => $futureTrialSchool->id, 'status' => MembershipStatus::Active]);
 
-    // 3. Trial school with null trial date (included)
+    // 3. Trial school with null trial date (excluded - open-ended trial is not active)
     $nullTrialSchool = School::factory()->create([
         'status' => SchoolStatus::Trial,
         'trial_ends_at' => null,
@@ -241,10 +241,10 @@ test('User::activeSchools excludes suspended, cancelled, expired-trial, soft-del
     $activeSchools = $user->activeSchools()->get();
     $activeSchoolIds = $activeSchools->pluck('id');
 
-    expect($activeSchools)->toHaveCount(3)
+    expect($activeSchools)->toHaveCount(2)
         ->and($activeSchoolIds)->toContain($activeSchool->id)
         ->and($activeSchoolIds)->toContain($futureTrialSchool->id)
-        ->and($activeSchoolIds)->toContain($nullTrialSchool->id)
+        ->and($activeSchoolIds)->not->toContain($nullTrialSchool->id)
         ->and($activeSchoolIds)->not->toContain($suspendedSchool->id)
         ->and($activeSchoolIds)->not->toContain($cancelledSchool->id)
         ->and($activeSchoolIds)->not->toContain($expiredTrialSchool->id)

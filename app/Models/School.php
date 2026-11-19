@@ -134,7 +134,7 @@ class School extends Model
         }
 
         if ($this->status === SchoolStatus::Trial) {
-            return $this->trial_ends_at === null || $this->trial_ends_at->isFuture();
+            return $this->trial_ends_at !== null && $this->trial_ends_at->greaterThanOrEqualTo(now());
         }
 
         return false;
@@ -143,7 +143,8 @@ class School extends Model
     /**
      * Scope a query to only include active and usable schools.
      *
-     * Excludes suspended, cancelled, expired-trial, and soft-deleted schools.
+     * Excludes suspended, cancelled, expired-trial, open-ended trials without end date,
+     * and soft-deleted schools.
      *
      * @param  Builder<School>  $query
      */
@@ -155,10 +156,8 @@ class School extends Model
             $q->where("{$table}.status", SchoolStatus::Active)
                 ->orWhere(function (Builder $trialQ) use ($table): void {
                     $trialQ->where("{$table}.status", SchoolStatus::Trial)
-                        ->where(function (Builder $dateQ) use ($table): void {
-                            $dateQ->whereNull("{$table}.trial_ends_at")
-                                ->orWhere("{$table}.trial_ends_at", '>=', now());
-                        });
+                        ->whereNotNull("{$table}.trial_ends_at")
+                        ->where("{$table}.trial_ends_at", '>=', now());
                 });
         });
     }

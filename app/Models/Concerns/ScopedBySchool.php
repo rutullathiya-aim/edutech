@@ -2,18 +2,21 @@
 
 namespace App\Models\Concerns;
 
+use App\Models\Scopes\SchoolScope;
+use App\Tenant\CurrentSchool;
+use LogicException;
+
 /**
  * Trait for models that are automatically scoped to the current school tenant.
  *
- * In Step C, this trait will attach the automatic fail-closed school filter (global scope)
- * and auto-fill school_id upon creation.
+ * Enforces fail-closed query isolation via SchoolScope and write isolation during creation:
+ * 1. Attaches SchoolScope (adding school_id = CurrentSchool::idOrFail() to every query).
+ * 2. When creating a record:
+ *    - If school_id is empty and a current school is active, auto-fills it from CurrentSchool.
+ *    - If school_id is provided but differs from the current school, refuses cross-school writes.
+ *    - If no current school is active (e.g. seeds, commands), requires an explicit school_id.
  *
- * Distinct from BelongsToSchool:
- * - Membership uses ONLY BelongsToSchool because login and school selection must query
- *   memberships across all schools before an active tenant school is known.
- * - Invitation uses BOTH BelongsToSchool and ScopedBySchool, but its token lookup
- *   (findPendingByToken) explicitly bypasses scoping via withoutGlobalScopes().
- * - Ordinary Layer 2+ tenant data will use both.
+ * @property string|null $school_id
  */
 trait ScopedBySchool
 {
@@ -22,6 +25,22 @@ trait ScopedBySchool
      */
     protected static function bootScopedBySchool(): void
     {
-        // Step C will register the SchoolScope global scope and creating auto-filler here.
+        static::addGlobalScope(new SchoolScope);
+
+        static::creating(function (self $model): void {
+            if (CurrentSchool::check()) {
+                $currentSchoolId = CurrentSchool::idOrFail();
+
+                if (empty($model->school_id)) {
+                    $model->school_id = $currentSchoolId;
+                } elseif ($model->school_id !== $currentSchoolId) {
+                    throw new LogicException("Cross-school write refused: cannot assign school_id '{$model->school_id}' when current tenant is '{$currentSchoolId}'.");
+                }
+            } else {
+                if (empty($model->school_id)) {
+                    throw new LogicException('A school_id must be provided when creating a school-scoped model without an active tenant context.');
+                }
+            }
+        });
     }
 }

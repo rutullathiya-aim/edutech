@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\NoCurrentSchoolException;
 use App\Livewire\Settings\Security;
 use App\Models\Activity;
 use App\Models\Membership;
@@ -232,6 +233,21 @@ test('CurrentSchool uses hidden Context that is not exposed to Context::has', fu
     expect(CurrentSchool::check())->toBeFalse()
         ->and(CurrentSchool::get())->toBeNull()
         ->and(CurrentSchool::id())->toBeNull();
+});
+
+test('CurrentSchool idOrFail and getOrFail throw NoCurrentSchoolException when no school is set', function () {
+    CurrentSchool::forget();
+
+    expect(fn () => CurrentSchool::idOrFail())->toThrow(NoCurrentSchoolException::class)
+        ->and(fn () => CurrentSchool::getOrFail())->toThrow(NoCurrentSchoolException::class);
+
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    expect(CurrentSchool::idOrFail())->toBe($school->id)
+        ->and(CurrentSchool::getOrFail()->id)->toBe($school->id);
+
+    CurrentSchool::forget();
 });
 
 test('ip_address and user_agent are always overwritten during a web request even if manually passed', function () {

@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Settings;
 
+use App\Enums\MembershipStatus;
 use App\Livewire\Settings\Security;
 use App\Livewire\Settings\TwoFactor\RecoveryCodes;
 use App\Models\Activity;
+use App\Models\Membership;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -176,6 +179,13 @@ class SecurityTest extends TestCase
             'password' => Hash::make('old-password'),
         ]);
 
+        $school = School::factory()->create();
+        Membership::factory()->create([
+            'school_id' => $school->id,
+            'user_id' => $user->id,
+            'status' => MembershipStatus::Active,
+        ]);
+
         $guardName = auth()->guard('web')->getName();
 
         $device2Session = [
@@ -185,7 +195,7 @@ class SecurityTest extends TestCase
 
         // Device 2 is currently authenticated
         $this->withSession($device2Session)
-            ->get(route('dashboard'))
+            ->get(route('dashboard', ['school' => $school->id]))
             ->assertOk();
 
         // Device 1 changes the password
@@ -203,7 +213,7 @@ class SecurityTest extends TestCase
         // AuthenticateSession middleware refuses it and redirects to login
         $this->flushSession();
         $response = $this->withSession($device2Session)
-            ->get(route('dashboard'));
+            ->get(route('dashboard', ['school' => $school->id]));
 
         $response->assertRedirect(route('login'));
         $this->assertGuest();

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\SetCurrentSchool;
 use App\Listeners\AuditLogSubscriber;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
 
         Event::subscribe(AuditLogSubscriber::class);
+
+        Livewire::addPersistentMiddleware([
+            SetCurrentSchool::class,
+        ]);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Casts\NormalizedMobile;
 use App\Enums\SchoolRole;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\ScopedBySchool;
+use App\Models\Scopes\SchoolScope;
 use Carbon\CarbonInterface;
 use Database\Factories\InvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -166,11 +167,11 @@ class Invitation extends Model
      * Find a pending invitation by its raw token.
      *
      * Looking up an invitation by token happens before any tenant school is known,
-     * so we explicitly skip tenant scoping via withoutGlobalScopes().
+     * so we explicitly skip the SchoolScope filter by class name, leaving all other scopes intact.
      */
     public static function findPendingByToken(string $rawToken): ?self
     {
-        return static::withoutGlobalScopes()
+        return static::withoutGlobalScope(SchoolScope::class)
             ->pending()
             ->where('token_hash', static::hashToken($rawToken))
             ->first();

@@ -2,6 +2,7 @@
 
 namespace App\Tenant;
 
+use App\Exceptions\NoCurrentSchoolException;
 use App\Models\School;
 use Illuminate\Support\Facades\Context;
 
@@ -31,6 +32,22 @@ class CurrentSchool
     }
 
     /**
+     * Get the current school tenant instance or throw if none is set.
+     *
+     * @throws NoCurrentSchoolException
+     */
+    public static function getOrFail(): School
+    {
+        $school = static::get();
+
+        if ($school === null) {
+            throw new NoCurrentSchoolException;
+        }
+
+        return $school;
+    }
+
+    /**
      * Get the ID of the current school tenant.
      */
     public static function id(): ?string
@@ -39,6 +56,22 @@ class CurrentSchool
         $id = Context::getHidden(self::CONTEXT_ID_KEY);
 
         return $id ?? static::get()?->id;
+    }
+
+    /**
+     * Get the ID of the current school tenant or throw if none is set.
+     *
+     * @throws NoCurrentSchoolException
+     */
+    public static function idOrFail(): string
+    {
+        $id = static::id();
+
+        if ($id === null) {
+            throw new NoCurrentSchoolException;
+        }
+
+        return $id;
     }
 
     /**
