@@ -177,6 +177,14 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * Get the user's default active school.
+     */
+    public function defaultSchool(): ?School
+    {
+        return $this->activeSchools()->first();
+    }
+
+    /**
      * Determine if the user has any school memberships (active or disabled).
      */
     public function hasAnyMembership(): bool

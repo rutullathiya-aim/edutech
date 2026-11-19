@@ -2,11 +2,28 @@
 
 namespace Tests;
 
+use App\Tenant\CurrentSchool;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Fortify\Features;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        CurrentSchool::forget();
+        setPermissionsTeamId(null);
+    }
+
+    protected function tearDown(): void
+    {
+        CurrentSchool::forget();
+        setPermissionsTeamId(null);
+
+        parent::tearDown();
+    }
+
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void
     {
         if (! Features::enabled($feature)) {

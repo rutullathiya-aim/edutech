@@ -66,10 +66,23 @@ class SetCurrentSchool
 
         // 5. Set the permission package's current team to this school.
         setPermissionsTeamId($school->id);
+        $user->unsetRelation('roles');
+        $user->unsetRelation('permissions');
 
         // 6. Make the school the default school route parameter.
         URL::defaults(['school' => $school->id]);
 
         return $next($request);
+    }
+
+    /**
+     * Handle tasks after the response has been sent to the browser.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        CurrentSchool::forget();
+        setPermissionsTeamId(null);
+        $request->user()?->unsetRelation('roles');
+        $request->user()?->unsetRelation('permissions');
     }
 }

@@ -4,13 +4,6 @@
         @include('partials.head')
     </head>
     <body class="min-h-screen bg-white dark:bg-zinc-800">
-        @php
-            $dashboardUrl = \App\Tenant\CurrentSchool::check()
-                ? route('dashboard', ['school' => \App\Tenant\CurrentSchool::idOrFail()])
-                : (auth()->user()?->activeSchools()->first()
-                    ? route('dashboard', ['school' => auth()->user()->activeSchools()->first()->id])
-                    : url('/'));
-        @endphp
         <flux:sidebar sticky collapsible="mobile" class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:sidebar.header>
                 <x-app-logo :sidebar="true" :href="$dashboardUrl" wire:navigate />

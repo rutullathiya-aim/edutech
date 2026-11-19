@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use App\Http\Middleware\SetCurrentSchool;
 use App\Listeners\AuditLogSubscriber;
+use App\Tenant\CurrentSchool;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Livewire;
@@ -35,6 +37,18 @@ class AppServiceProvider extends ServiceProvider
         Livewire::addPersistentMiddleware([
             SetCurrentSchool::class,
         ]);
+
+        View::composer('*', function ($view): void {
+            if (! isset($view->getData()['dashboardUrl'])) {
+                $dashboardUrl = CurrentSchool::check()
+                    ? route('dashboard', ['school' => CurrentSchool::idOrFail()])
+                    : (auth()->user()?->defaultSchool()
+                        ? route('dashboard', ['school' => auth()->user()->defaultSchool()->id])
+                        : url('/'));
+
+                $view->with('dashboardUrl', $dashboardUrl);
+            }
+        });
     }
 
     /**

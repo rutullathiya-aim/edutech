@@ -10,9 +10,12 @@ use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
+use Database\Seeders\RoleSeeder;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 
 test('querying a school-scoped model with no current school throws NoCurrentSchoolException', function () {
@@ -186,6 +189,15 @@ test('visiting tenant route when school is inactive returns school unavailable p
 });
 
 test('visiting tenant route with active school and membership sets CurrentSchool, Spatie team ID, and URL default', function () {
+    Route::get('{school}/test-context-inspection', function () {
+        return response()->json([
+            'school_id' => CurrentSchool::id(),
+            'team_id' => getPermissionsTeamId(),
+            'default_route' => route('dashboard'),
+        ]);
+    })->whereUlid('school')
+        ->middleware(['auth', 'verified', SetCurrentSchool::class]);
+
     $school = School::factory()->create([
         'status' => SchoolStatus::Active,
     ]);
@@ -198,19 +210,150 @@ test('visiting tenant route with active school and membership sets CurrentSchool
     ]);
 
     $response = $this->actingAs($user)
-        ->get(route('dashboard', ['school' => $school->id]));
+        ->get("/{$school->id}/test-context-inspection");
 
-    $response->assertOk();
+    $response->assertOk()
+        ->assertJson([
+            'school_id' => $school->id,
+            'team_id' => $school->id,
+            'default_route' => route('dashboard', ['school' => $school->id]),
+        ]);
 
-    expect(CurrentSchool::id())->toBe($school->id)
-        ->and(getPermissionsTeamId())->toBe($school->id)
-        ->and(route('dashboard'))->toContain($school->id);
-
-    CurrentSchool::forget();
+    // Request termination clears context and team ID (S2)
+    expect(CurrentSchool::id())->toBeNull()
+        ->and(getPermissionsTeamId())->toBeNull();
 });
 
 test('SetCurrentSchool middleware is registered as Livewire persistent middleware', function () {
     $persistent = Livewire::getPersistentMiddleware();
 
     expect($persistent)->toContain(SetCurrentSchool::class);
+});
+
+test('route model binding on school-scoped records loads own school record with 200 and another school record with 404', function () {
+    Route::get('{school}/test-invitations/{invitation}', function (School $school, Invitation $invitation) {
+        return response()->json(['id' => $invitation->id]);
+    })->whereUlid('school')
+        ->middleware(['auth', 'verified', SetCurrentSchool::class, SubstituteBindings::class]);
+
+    $schoolA = School::factory()->create(['status' => SchoolStatus::Active]);
+    $schoolB = School::factory()->create(['status' => SchoolStatus::Active]);
+    $user = User::factory()->create();
+
+    Membership::factory()->create([
+        'school_id' => $schoolA->id,
+        'user_id' => $user->id,
+        'status' => MembershipStatus::Active,
+    ]);
+
+    [$invitationA] = Invitation::createWithToken([
+        'school_id' => $schoolA->id,
+        'email' => 'invite_a@school.org',
+        'role' => SchoolRole::Teacher,
+    ]);
+
+    [$invitationB] = Invitation::createWithToken([
+        'school_id' => $schoolB->id,
+        'email' => 'invite_b@school.org',
+        'role' => SchoolRole::Teacher,
+    ]);
+
+    // Own school record loads successfully (200)
+    $this->actingAs($user)
+        ->get("/{$schoolA->id}/test-invitations/{$invitationA->id}")
+        ->assertOk()
+        ->assertJson(['id' => $invitationA->id]);
+
+    // Another school record is scoped out and returns 404, NOT 500
+    $this->actingAs($user)
+        ->get("/{$schoolA->id}/test-invitations/{$invitationB->id}")
+        ->assertNotFound();
+});
+
+test('a guest opening a school URL is redirected to login', function () {
+    $school = School::factory()->create(['status' => SchoolStatus::Active]);
+
+    $this->get("/{$school->id}/dashboard")
+        ->assertRedirect(route('login'));
+});
+
+test('root routes login, settings/profile, and dashboard resolution are not caught by school route', function () {
+    $school = School::factory()->create(['status' => SchoolStatus::Active]);
+    $user = User::factory()->create();
+    Membership::factory()->create([
+        'school_id' => $school->id,
+        'user_id' => $user->id,
+        'status' => MembershipStatus::Active,
+    ]);
+
+    // Guest login page
+    $this->get('/login')->assertOk();
+
+    // Authenticated profile page
+    $this->actingAs($user)->get('/settings/profile')->assertOk();
+
+    // Root /dashboard redirects to tenant dashboard
+    $this->actingAs($user)->get('/dashboard')
+        ->assertRedirect("/{$school->id}/dashboard");
+});
+
+test('roles follow the URL across multiple schools', function () {
+    $this->seed(RoleSeeder::class);
+
+    Route::get('{school}/test-role-check', function () {
+        return response()->json([
+            'team_id' => getPermissionsTeamId(),
+            'is_teacher' => auth()->user()?->hasRole(SchoolRole::Teacher->value),
+            'is_parent' => auth()->user()?->hasRole(SchoolRole::Parent->value),
+        ]);
+    })->whereUlid('school')
+        ->middleware(['auth', 'verified', SetCurrentSchool::class]);
+
+    $schoolA = School::factory()->create(['status' => SchoolStatus::Active]);
+    $schoolB = School::factory()->create(['status' => SchoolStatus::Active]);
+    $user = User::factory()->create();
+
+    Membership::factory()->create([
+        'school_id' => $schoolA->id,
+        'user_id' => $user->id,
+        'status' => MembershipStatus::Active,
+    ]);
+
+    Membership::factory()->create([
+        'school_id' => $schoolB->id,
+        'user_id' => $user->id,
+        'status' => MembershipStatus::Active,
+    ]);
+
+    // In School A, user is Teacher
+    setPermissionsTeamId($schoolA->id);
+    $user->assignRole(SchoolRole::Teacher->value);
+
+    // In School B, user is Parent
+    setPermissionsTeamId($schoolB->id);
+    $user->assignRole(SchoolRole::Parent->value);
+
+    // Reset team ID before requests
+    setPermissionsTeamId(null);
+
+    // When requesting School A's dashboard / route:
+    $this->actingAs($user)->get("/{$schoolA->id}/test-role-check")
+        ->assertOk()
+        ->assertJson([
+            'team_id' => $schoolA->id,
+            'is_teacher' => true,
+            'is_parent' => false,
+        ]);
+
+    // When requesting School B's dashboard / route:
+    $this->actingAs($user)->get("/{$schoolB->id}/test-role-check")
+        ->assertOk()
+        ->assertJson([
+            'team_id' => $schoolB->id,
+            'is_teacher' => false,
+            'is_parent' => true,
+        ]);
+
+    // Request termination clears permissions team ID
+    expect(getPermissionsTeamId())->toBeNull();
 });
