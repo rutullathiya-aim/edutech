@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\MembershipStatus;
+use App\Enums\SchoolStatus;
 use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
@@ -177,4 +178,76 @@ test('school_id cannot be changed once a membership is created', function () {
     $membership->school_id = $otherSchool->id;
 
     expect(fn () => $membership->save())->toThrow(LogicException::class, 'The school_id cannot be changed once a record is created.');
+});
+
+test('membership isActive helper and active scope work correctly', function () {
+    $active = Membership::factory()->active()->create();
+    $disabled = Membership::factory()->disabled()->create();
+
+    expect($active->isActive())->toBeTrue()
+        ->and($disabled->isActive())->toBeFalse();
+
+    $activeIds = Membership::active()->pluck('id');
+
+    expect($activeIds)->toContain($active->id)
+        ->and($activeIds)->not->toContain($disabled->id);
+});
+
+test('User::activeSchools excludes suspended, cancelled, expired-trial, soft-deleted, and disabled-membership schools', function () {
+    $user = User::factory()->create();
+
+    // 1. Active school (included)
+    $activeSchool = School::factory()->create(['status' => SchoolStatus::Active]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $activeSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 2. Trial school with future trial date (included)
+    $futureTrialSchool = School::factory()->create([
+        'status' => SchoolStatus::Trial,
+        'trial_ends_at' => now()->addDays(14),
+    ]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $futureTrialSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 3. Trial school with null trial date (included)
+    $nullTrialSchool = School::factory()->create([
+        'status' => SchoolStatus::Trial,
+        'trial_ends_at' => null,
+    ]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $nullTrialSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 4. Suspended school (excluded)
+    $suspendedSchool = School::factory()->create(['status' => SchoolStatus::Suspended]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $suspendedSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 5. Cancelled school (excluded)
+    $cancelledSchool = School::factory()->create(['status' => SchoolStatus::Cancelled]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $cancelledSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 6. Expired trial school (excluded)
+    $expiredTrialSchool = School::factory()->create([
+        'status' => SchoolStatus::Trial,
+        'trial_ends_at' => now()->subDay(),
+    ]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $expiredTrialSchool->id, 'status' => MembershipStatus::Active]);
+
+    // 7. Soft-deleted school (excluded)
+    $softDeletedSchool = School::factory()->create(['status' => SchoolStatus::Active]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $softDeletedSchool->id, 'status' => MembershipStatus::Active]);
+    $softDeletedSchool->delete();
+
+    // 8. Active school with disabled membership (excluded)
+    $disabledMembershipSchool = School::factory()->create(['status' => SchoolStatus::Active]);
+    Membership::factory()->create(['user_id' => $user->id, 'school_id' => $disabledMembershipSchool->id, 'status' => MembershipStatus::Disabled]);
+
+    $activeSchools = $user->activeSchools()->get();
+    $activeSchoolIds = $activeSchools->pluck('id');
+
+    expect($activeSchools)->toHaveCount(3)
+        ->and($activeSchoolIds)->toContain($activeSchool->id)
+        ->and($activeSchoolIds)->toContain($futureTrialSchool->id)
+        ->and($activeSchoolIds)->toContain($nullTrialSchool->id)
+        ->and($activeSchoolIds)->not->toContain($suspendedSchool->id)
+        ->and($activeSchoolIds)->not->toContain($cancelledSchool->id)
+        ->and($activeSchoolIds)->not->toContain($expiredTrialSchool->id)
+        ->and($activeSchoolIds)->not->toContain($softDeletedSchool->id)
+        ->and($activeSchoolIds)->not->toContain($disabledMembershipSchool->id);
 });

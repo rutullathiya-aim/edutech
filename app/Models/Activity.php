@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Tenant\CurrentSchool;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Context;
 use LogicException;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
 
@@ -46,20 +46,20 @@ class Activity extends SpatieActivity
                 $schoolId = $activity->subject->id;
             } elseif ($activity->subject && isset($activity->subject->school_id)) {
                 $schoolId = $activity->subject->school_id;
-            } elseif (Context::has('school_id')) {
-                $schoolId = Context::get('school_id');
+            } elseif (CurrentSchool::check()) {
+                $schoolId = CurrentSchool::id();
             }
 
             $activity->school_id = $schoolId;
 
             if (app()->bound('request')) {
                 $request = request();
-                if ($activity->ip_address === null) {
-                    $activity->ip_address = $request->ip();
-                }
-                if ($activity->user_agent === null) {
-                    $activity->user_agent = $request->userAgent();
-                }
+                $activity->ip_address = $request->ip();
+                $activity->user_agent = $request->userAgent() !== null
+                    ? substr($request->userAgent(), 0, 500)
+                    : null;
+            } elseif ($activity->user_agent !== null) {
+                $activity->user_agent = substr($activity->user_agent, 0, 500);
             }
         });
 

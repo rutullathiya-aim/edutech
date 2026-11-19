@@ -5,6 +5,8 @@ use App\Models\Activity;
 use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
+use App\Tenant\CurrentSchool;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 
@@ -194,4 +196,75 @@ test('a failed login with a password-like string in the email field leaves no tr
     $encoded = json_encode($activity->toArray());
     expect($encoded)->not->toContain($leakedPassword)
         ->and($encoded)->not->toContain('some-password');
+});
+
+test('an activity logged inside a school request with a subject that has no school_id gets the current schools ID', function () {
+    $school = School::factory()->create();
+    $user = User::factory()->create();
+
+    CurrentSchool::set($school);
+
+    try {
+        $activity = activity()
+            ->performedOn($user)
+            ->event('user_action')
+            ->log('User updated in school context');
+
+        expect($activity->school_id)->toBe($school->id)
+            ->and($activity->fresh()->school_id)->toBe($school->id);
+    } finally {
+        CurrentSchool::forget();
+    }
+});
+
+test('CurrentSchool uses hidden Context that is not exposed to Context::has', function () {
+    $school = School::factory()->create();
+
+    CurrentSchool::set($school);
+
+    expect(Context::has('tenant_school'))->toBeFalse()
+        ->and(CurrentSchool::check())->toBeTrue()
+        ->and(CurrentSchool::get()?->id)->toBe($school->id)
+        ->and(CurrentSchool::id())->toBe($school->id);
+
+    CurrentSchool::forget();
+
+    expect(CurrentSchool::check())->toBeFalse()
+        ->and(CurrentSchool::get())->toBeNull()
+        ->and(CurrentSchool::id())->toBeNull();
+});
+
+test('ip_address and user_agent are always overwritten during a web request even if manually passed', function () {
+    $user = User::factory()->create();
+
+    $this->withServerVariables([
+        'REMOTE_ADDR' => '10.0.0.1',
+        'HTTP_USER_AGENT' => 'ActualAgent/2.0',
+    ])->post(route('login'), [
+        'email' => $user->email,
+        'password' => 'wrong-pass',
+    ]);
+
+    $activity = Activity::where('event', 'failed_login')->latest()->first();
+
+    expect($activity)->not->toBeNull()
+        ->and($activity->ip_address)->toBe('10.0.0.1')
+        ->and($activity->user_agent)->toBe('ActualAgent/2.0');
+});
+
+test('user_agent length is capped at 500 characters', function () {
+    $longUserAgent = str_repeat('A', 800);
+
+    $this->withServerVariables([
+        'HTTP_USER_AGENT' => $longUserAgent,
+    ])->post(route('login'), [
+        'email' => 'nobody@school.org',
+        'password' => 'wrong-pass',
+    ]);
+
+    $activity = Activity::where('event', 'failed_login')->latest()->first();
+
+    expect($activity)->not->toBeNull()
+        ->and(strlen((string) $activity->user_agent))->toBe(500)
+        ->and($activity->user_agent)->toBe(substr($longUserAgent, 0, 500));
 });

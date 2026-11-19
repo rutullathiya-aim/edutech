@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
+use App\Enums\MembershipStatus;
 use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -158,6 +159,21 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->belongsToMany(School::class, 'memberships')
             ->withPivot(['id', 'status', 'joined_at', 'disabled_at'])
             ->withTimestamps();
+    }
+
+    /**
+     * Get all active schools the user has an active membership in.
+     *
+     * Excludes suspended, cancelled, expired-trial, and soft-deleted schools,
+     * as well as disabled memberships.
+     *
+     * @return BelongsToMany<School, $this>
+     */
+    public function activeSchools(): BelongsToMany
+    {
+        return $this->schools()
+            ->wherePivot('status', MembershipStatus::Active)
+            ->active();
     }
 
     /**

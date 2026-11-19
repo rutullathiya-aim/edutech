@@ -7,6 +7,7 @@ use App\Models\Concerns\BelongsToSchool;
 use Carbon\CarbonInterface;
 use Database\Factories\MembershipFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -63,6 +64,24 @@ class Membership extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Determine if the membership is active.
+     */
+    public function isActive(): bool
+    {
+        return $this->status === MembershipStatus::Active;
+    }
+
+    /**
+     * Scope a query to only include active memberships.
+     *
+     * @param  Builder<Membership>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->where('status', MembershipStatus::Active);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Enums\SchoolBoard;
 use App\Enums\SchoolStatus;
 use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -117,5 +118,48 @@ class School extends Model
         return $this->belongsToMany(User::class, 'memberships')
             ->withPivot(['id', 'status', 'joined_at', 'disabled_at'])
             ->withTimestamps();
+    }
+
+    /**
+     * Determine if the school is currently active and usable.
+     */
+    public function isActive(): bool
+    {
+        if ($this->trashed()) {
+            return false;
+        }
+
+        if ($this->status === SchoolStatus::Active) {
+            return true;
+        }
+
+        if ($this->status === SchoolStatus::Trial) {
+            return $this->trial_ends_at === null || $this->trial_ends_at->isFuture();
+        }
+
+        return false;
+    }
+
+    /**
+     * Scope a query to only include active and usable schools.
+     *
+     * Excludes suspended, cancelled, expired-trial, and soft-deleted schools.
+     *
+     * @param  Builder<School>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $table = $this->getTable();
+
+        $query->where(function (Builder $q) use ($table): void {
+            $q->where("{$table}.status", SchoolStatus::Active)
+                ->orWhere(function (Builder $trialQ) use ($table): void {
+                    $trialQ->where("{$table}.status", SchoolStatus::Trial)
+                        ->where(function (Builder $dateQ) use ($table): void {
+                            $dateQ->whereNull("{$table}.trial_ends_at")
+                                ->orWhere("{$table}.trial_ends_at", '>=', now());
+                        });
+                });
+        });
     }
 }
