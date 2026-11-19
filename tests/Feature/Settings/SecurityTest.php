@@ -4,6 +4,7 @@ namespace Tests\Feature\Settings;
 
 use App\Livewire\Settings\Security;
 use App\Livewire\Settings\TwoFactor\RecoveryCodes;
+use App\Models\Activity;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -206,5 +207,28 @@ class SecurityTest extends TestCase
 
         $response->assertRedirect(route('login'));
         $this->assertGuest();
+    }
+
+    public function test_updating_password_produces_exactly_one_audit_log_entry(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('old-password'),
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()]);
+
+        Livewire::test(Security::class)
+            ->set('current_password', 'old-password')
+            ->set('password', 'new-password')
+            ->set('password_confirmation', 'new-password')
+            ->call('updatePassword')
+            ->assertHasNoErrors();
+
+        $entries = Activity::where('event', 'password_changed')
+            ->where('subject_id', $user->id)
+            ->get();
+
+        $this->assertCount(1, $entries);
     }
 }

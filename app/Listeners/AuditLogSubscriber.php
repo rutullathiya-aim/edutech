@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Models\User;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -34,12 +35,42 @@ class AuditLogSubscriber
      */
     public function handleFailedLogin(Failed $event): void
     {
-        $email = $event->credentials['email'] ?? $event->credentials['username'] ?? null;
+        $rawIdentifier = $event->credentials['email'] ?? $event->credentials['username'] ?? null;
+        $user = $event->user;
 
-        activity('auth')
-            ->event('failed_login')
-            ->withProperty('email', $email)
-            ->log('Failed login attempt');
+        if (! $user && is_string($rawIdentifier) && filter_var($rawIdentifier, FILTER_VALIDATE_EMAIL)) {
+            $user = User::where('email', strtolower(trim($rawIdentifier)))->first();
+        }
+
+        $activity = activity('auth')->event('failed_login');
+
+        if ($user instanceof Model) {
+            $activity->performedOn($user);
+        } elseif (is_string($rawIdentifier) && filter_var($rawIdentifier, FILTER_VALIDATE_EMAIL)) {
+            $activity->withProperty('attempted_email', $this->maskEmail($rawIdentifier));
+        }
+
+        $activity->log('Failed login attempt');
+    }
+
+    /**
+     * Mask an email address to protect privacy.
+     */
+    protected function maskEmail(string $email): string
+    {
+        $parts = explode('@', $email, 2);
+        if (count($parts) !== 2) {
+            return '***';
+        }
+
+        $local = $parts[0];
+        $domain = $parts[1];
+
+        $maskedLocal = strlen($local) <= 2
+            ? substr($local, 0, 1).'***'
+            : substr($local, 0, 2).'***';
+
+        return $maskedLocal.'@'.$domain;
     }
 
     /**

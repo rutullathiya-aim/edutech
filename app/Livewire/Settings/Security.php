@@ -3,6 +3,7 @@
 namespace App\Livewire\Settings;
 
 use App\Concerns\PasswordValidationRules;
+use App\Models\User;
 use Exception;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
@@ -108,11 +109,21 @@ class Security extends Component
             throw $e;
         }
 
-        Auth::user()->update([
-            'password' => $validated['password'],
-        ]);
+        $user = Auth::user();
 
-        Auth::logoutOtherDevices($validated['password']);
+        if ($user instanceof User) {
+            $user->update([
+                'password' => $validated['password'],
+            ]);
+
+            Auth::logoutOtherDevices($validated['password']);
+
+            activity('auth')
+                ->causedBy($user)
+                ->performedOn($user)
+                ->event('password_changed')
+                ->log('Password updated');
+        }
 
         $this->reset('current_password', 'password', 'password_confirmation');
 

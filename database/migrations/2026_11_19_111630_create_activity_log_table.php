@@ -16,6 +16,8 @@ return new class extends Migration
             $table->string('event')->nullable();
             $table->nullableUlidMorphs('causer');
             $table->foreignUlid('school_id')->nullable()->constrained('schools')->restrictOnDelete();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
             $table->json('properties')->nullable();
             $table->json('attribute_changes')->nullable();
             $table->timestamps();

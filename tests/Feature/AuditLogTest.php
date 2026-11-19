@@ -1,10 +1,12 @@
 <?php
 
+use App\Livewire\Settings\Security;
 use App\Models\Activity;
 use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Livewire\Livewire;
 
 test('a school-owned subject gets that schools school_id in the activity log', function () {
     $school = School::factory()->create();
@@ -73,14 +75,52 @@ test('updating or deleting an activity log entry is refused', function () {
         ->toThrow(LogicException::class, 'Activity logs are append-only and cannot be deleted.');
 });
 
+test('a School model as subject sets school_id to the schools own id', function () {
+    $school = School::factory()->create();
+
+    $activity = activity()
+        ->performedOn($school)
+        ->event('school_updated')
+        ->log('School settings updated');
+
+    expect($activity->school_id)->toBe($school->id)
+        ->and($activity->fresh()->school_id)->toBe($school->id);
+});
+
+test('a web request records ip_address and user_agent on activity logs', function () {
+    $user = User::factory()->create([
+        'password' => Hash::make('password123'),
+    ]);
+
+    $this->withServerVariables([
+        'REMOTE_ADDR' => '192.168.1.100',
+        'HTTP_USER_AGENT' => 'TestBrowser/1.0',
+    ])->post(route('login'), [
+        'email' => $user->email,
+        'password' => 'password123',
+    ]);
+
+    $activity = Activity::where('event', 'login')->latest()->first();
+
+    expect($activity)->not->toBeNull()
+        ->and($activity->ip_address)->toBe('192.168.1.100')
+        ->and($activity->user_agent)->toBe('TestBrowser/1.0');
+});
+
 test('after a password change no password or hash appears in properties or attribute_changes', function () {
     $user = User::factory()->create([
         'password' => Hash::make('old-password'),
     ]);
 
-    $user->update([
-        'password' => Hash::make('new-password'),
-    ]);
+    $this->actingAs($user)
+        ->withSession(['auth.password_confirmed_at' => time()]);
+
+    Livewire::test(Security::class)
+        ->set('current_password', 'old-password')
+        ->set('password', 'new-password')
+        ->set('password_confirmation', 'new-password')
+        ->call('updatePassword')
+        ->assertHasNoErrors();
 
     $activity = Activity::where('event', 'password_changed')
         ->where('subject_id', $user->id)
@@ -100,22 +140,58 @@ test('after a password change no password or hash appears in properties or attri
         ->and($changesString)->not->toContain('$2y$');
 });
 
-test('a failed login is logged without the attempted password', function () {
+test('a failed login with an existing user logs that user as the subject without typed input in properties', function () {
+    $user = User::factory()->create([
+        'email' => 'teacher@school.org',
+        'password' => Hash::make('correct-password'),
+    ]);
+
     $this->post(route('login'), [
-        'email' => 'unknown@school.org',
-        'password' => 'secret-super-password',
+        'email' => 'teacher@school.org',
+        'password' => 'wrong-password',
     ]);
 
     $activity = Activity::where('event', 'failed_login')->latest()->first();
 
     expect($activity)->not->toBeNull()
-        ->and($activity->school_id)->toBeNull();
-
-    $properties = $activity->properties;
-    expect($properties)->not->toBeNull()
-        ->and($properties->get('email'))->toBe('unknown@school.org')
-        ->and($properties->has('password'))->toBeFalse();
+        ->and($activity->subject_type)->toBe(User::class)
+        ->and($activity->subject_id)->toBe($user->id);
 
     $encoded = json_encode($activity->toArray());
-    expect($encoded)->not->toContain('secret-super-password');
+    expect($encoded)->not->toContain('wrong-password')
+        ->and($activity->properties)->toBeEmpty();
+});
+
+test('a failed login with an unknown email stores only a masked email', function () {
+    $this->post(route('login'), [
+        'email' => 'stranger@example.com',
+        'password' => 'wrong-password',
+    ]);
+
+    $activity = Activity::where('event', 'failed_login')->latest()->first();
+
+    expect($activity)->not->toBeNull()
+        ->and($activity->subject_id)->toBeNull()
+        ->and($activity->properties->get('attempted_email'))->toBe('st***@example.com');
+
+    $encoded = json_encode($activity->toArray());
+    expect($encoded)->not->toContain('stranger@example.com')
+        ->and($encoded)->not->toContain('wrong-password');
+});
+
+test('a failed login with a password-like string in the email field leaves no trace of that string in the log', function () {
+    $leakedPassword = 'SuperSecretAccidentalPassword#123';
+
+    $this->post(route('login'), [
+        'email' => $leakedPassword,
+        'password' => 'some-password',
+    ]);
+
+    $activity = Activity::where('event', 'failed_login')->latest()->first();
+
+    expect($activity)->not->toBeNull();
+
+    $encoded = json_encode($activity->toArray());
+    expect($encoded)->not->toContain($leakedPassword)
+        ->and($encoded)->not->toContain('some-password');
 });

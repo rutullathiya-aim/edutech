@@ -20,6 +20,8 @@ use Spatie\Activitylog\Models\Activity as SpatieActivity;
  * @property string|null $causer_type
  * @property string|null $causer_id
  * @property string|null $school_id
+ * @property string|null $ip_address
+ * @property string|null $user_agent
  * @property Collection<string, mixed>|null $properties
  * @property array<string, mixed>|null $attribute_changes
  * @property CarbonInterface|null $created_at
@@ -40,13 +42,25 @@ class Activity extends SpatieActivity
         static::creating(function (Activity $activity): void {
             $schoolId = null;
 
-            if ($activity->subject && isset($activity->subject->school_id)) {
+            if ($activity->subject instanceof School) {
+                $schoolId = $activity->subject->id;
+            } elseif ($activity->subject && isset($activity->subject->school_id)) {
                 $schoolId = $activity->subject->school_id;
             } elseif (Context::has('school_id')) {
                 $schoolId = Context::get('school_id');
             }
 
             $activity->school_id = $schoolId;
+
+            if (app()->bound('request')) {
+                $request = request();
+                if ($activity->ip_address === null) {
+                    $activity->ip_address = $request->ip();
+                }
+                if ($activity->user_agent === null) {
+                    $activity->user_agent = $request->userAgent();
+                }
+            }
         });
 
         static::updating(function (): void {

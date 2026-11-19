@@ -6,6 +6,7 @@ use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
 use App\Enums\SchoolRole;
 use App\Models\Concerns\BelongsToSchool;
+use App\Models\Concerns\ScopedBySchool;
 use Carbon\CarbonInterface;
 use Database\Factories\InvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -44,7 +45,7 @@ use LogicException;
 class Invitation extends Model
 {
     /** @use HasFactory<InvitationFactory> */
-    use BelongsToSchool, HasFactory, HasUlids;
+    use BelongsToSchool, HasFactory, HasUlids, ScopedBySchool;
 
     /**
      * The "booted" method of the model.
@@ -163,10 +164,13 @@ class Invitation extends Model
 
     /**
      * Find a pending invitation by its raw token.
+     *
+     * Looking up an invitation by token happens before any tenant school is known,
+     * so we explicitly skip tenant scoping via withoutGlobalScopes().
      */
     public static function findPendingByToken(string $rawToken): ?self
     {
-        return static::query()
+        return static::withoutGlobalScopes()
             ->pending()
             ->where('token_hash', static::hashToken($rawToken))
             ->first();

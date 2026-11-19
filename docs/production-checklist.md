@@ -39,3 +39,10 @@ This document details mandatory production security and operational requirements
   - Never log passwords, password hashes, reset tokens, invitation tokens, 2FA secrets/recovery codes, or unmasked Aadhaar numbers.
   - School data isolation: audit entries are scoped by `school_id`.
   - Retention: Do not schedule `activitylog:clean` until data retention duration (e.g. accounting, fee and payment audit trails) is confirmed with a CA.
+
+---
+
+## 4. Queues & Background Workers
+- [ ] **Queue Worker Process**: Run persistent queue workers (e.g. via Supervisor) in production (`php artisan queue:work`). Without a running worker, queued security notifications (password reset, email changed) will never send while the UI silently reports success.
+- [ ] **Prune Failed Jobs**: Schedule `php artisan queue:prune-failed --hours=48` to prevent failed jobs from persisting indefinitely in `failed_jobs`.
+- [ ] **Encrypted Token Payloads**: Every queued job or notification that carries a sensitive token (password reset links, invitation links, OTPs) must implement `Illuminate\Contracts\Queue\ShouldBeEncrypted` so that payloads are encrypted with `APP_KEY` in the database.

@@ -56,14 +56,6 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     protected static function booted(): void
     {
         static::updated(function (User $user): void {
-            if ($user->wasChanged('password')) {
-                activity('auth')
-                    ->causedBy(auth()->user() ?? $user)
-                    ->performedOn($user)
-                    ->event('password_changed')
-                    ->log('Password updated');
-            }
-
             if ($user->wasChanged('email')) {
                 activity('profile')
                     ->causedBy(auth()->user() ?? $user)

@@ -3,8 +3,11 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Notifications\ResetPasswordNotification;
 use App\Notifications\ResetPasswordNotification as ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -99,5 +102,33 @@ class PasswordResetTest extends TestCase
 
             return true;
         });
+    }
+
+    public function test_stored_job_payload_for_reset_email_does_not_contain_raw_token(): void
+    {
+        config(['queue.default' => 'database']);
+
+        $user = User::factory()->create(['email' => 'queued_reset@example.com']);
+
+        $this->post(route('password.email'), ['email' => $user->email]);
+
+        $job = DB::table('jobs')->latest('id')->first();
+
+        $this->assertNotNull($job);
+
+        /** @var array{data: array{command: string}} $payload */
+        $payload = json_decode((string) $job->payload, true);
+        $this->assertNotNull($payload);
+
+        $encryptedCommand = $payload['data']['command'];
+        /** @var SendQueuedNotifications $decryptedCommand */
+        $decryptedCommand = unserialize(decrypt($encryptedCommand));
+
+        /** @var ResetPasswordNotification $notification */
+        $notification = $decryptedCommand->notification;
+        $rawToken = $notification->token;
+        $this->assertNotEmpty($rawToken);
+
+        $this->assertStringNotContainsString($rawToken, (string) $job->payload);
     }
 }
