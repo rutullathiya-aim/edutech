@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
 use App\Enums\SchoolRole;
+use App\Models\Concerns\BelongsToSchool;
 use Carbon\CarbonInterface;
 use Database\Factories\InvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -43,7 +44,7 @@ use LogicException;
 class Invitation extends Model
 {
     /** @use HasFactory<InvitationFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSchool, HasFactory, HasUlids;
 
     /**
      * The "booted" method of the model.
@@ -73,16 +74,6 @@ class Invitation extends Model
             'accepted_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
-    }
-
-    /**
-     * Get the school the invitation is for.
-     *
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
-    {
-        return $this->belongsTo(School::class);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MembershipStatus;
+use App\Models\Concerns\BelongsToSchool;
 use Carbon\CarbonInterface;
 use Database\Factories\MembershipFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -29,7 +30,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Membership extends Model
 {
     /** @use HasFactory<MembershipFactory> */
-    use HasFactory, HasUlids;
+    use BelongsToSchool, HasFactory, HasUlids;
 
     /**
      * The model's default values for attributes.
@@ -52,16 +53,6 @@ class Membership extends Model
             'joined_at' => 'datetime',
             'disabled_at' => 'datetime',
         ];
-    }
-
-    /**
-     * Get the school that the membership belongs to.
-     *
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
-    {
-        return $this->belongsTo(School::class);
     }
 
     /**

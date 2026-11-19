@@ -51,6 +51,54 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     use HasFactory, HasRoles, HasUlids, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('password')) {
+                activity('auth')
+                    ->causedBy(auth()->user() ?? $user)
+                    ->performedOn($user)
+                    ->event('password_changed')
+                    ->log('Password updated');
+            }
+
+            if ($user->wasChanged('email')) {
+                activity('profile')
+                    ->causedBy(auth()->user() ?? $user)
+                    ->performedOn($user)
+                    ->event('email_changed')
+                    ->withProperties([
+                        'old' => $user->getOriginal('email'),
+                        'new' => $user->email,
+                    ])
+                    ->log('Email address updated');
+            }
+
+            if ($user->wasChanged('mobile')) {
+                activity('profile')
+                    ->causedBy(auth()->user() ?? $user)
+                    ->performedOn($user)
+                    ->event('mobile_changed')
+                    ->withProperties([
+                        'old' => $user->getOriginal('mobile'),
+                        'new' => $user->mobile,
+                    ])
+                    ->log('Mobile number updated');
+            }
+        });
+
+        static::deleting(function (User $user): void {
+            activity('account')
+                ->causedBy(auth()->user() ?? $user)
+                ->performedOn($user)
+                ->event('account_deleted')
+                ->log('User account deleted');
+        });
+    }
+
+    /**
      * The model's default values for attributes.
      *
      * @var array<string, mixed>

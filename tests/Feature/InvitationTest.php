@@ -300,3 +300,12 @@ test('factory states for pending, accepted, revoked, expired, forEmail, and forM
     $expired = Invitation::factory()->expired()->create();
     expect($expired->expires_at->isPast())->toBeTrue();
 });
+
+test('school_id cannot be changed once an invitation is created', function () {
+    $invitation = Invitation::factory()->create();
+    $otherSchool = School::factory()->create();
+
+    $invitation->school_id = $otherSchool->id;
+
+    expect(fn () => $invitation->save())->toThrow(LogicException::class, 'The school_id cannot be changed once a record is created.');
+});

@@ -169,3 +169,12 @@ test('updating a membership preserves joined_at date', function () {
     expect($refreshed->joined_at->isSameDay($thirtyDaysAgo))->toBeTrue()
         ->and($refreshed->disabled_at)->not->toBeNull();
 });
+
+test('school_id cannot be changed once a membership is created', function () {
+    $membership = Membership::factory()->create();
+    $otherSchool = School::factory()->create();
+
+    $membership->school_id = $otherSchool->id;
+
+    expect(fn () => $membership->save())->toThrow(LogicException::class, 'The school_id cannot be changed once a record is created.');
+});
