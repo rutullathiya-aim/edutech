@@ -57,6 +57,7 @@ class PermissionSeeder extends Seeder
             SchoolPermission::GradesView,
             SchoolPermission::SectionsView,
             SchoolPermission::SubjectsView,
+            SchoolPermission::StudentsView,
         ];
 
         return [

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\BloodGroup;
 use App\Enums\Gender;
+use App\Enums\IndianState;
 use App\Enums\SocialCategory;
 use App\Enums\StudentStatus;
 use App\Models\Concerns\BelongsToSchool;
@@ -39,7 +40,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string|null $aadhaar_last4
  * @property string|null $address_line
  * @property string|null $city
- * @property string|null $state
+ * @property IndianState|null $state
  * @property string|null $pincode
  * @property string|null $previous_school
  * @property string|null $previous_tc_no
@@ -96,6 +97,17 @@ class Student extends Model
     ];
 
     /**
+     * Nullable enum attributes where blank strings collapse to null before enum casting.
+     *
+     * @var list<string>
+     */
+    private const array NULLABLE_ENUM_FIELDS = [
+        'social_category',
+        'blood_group',
+        'state',
+    ];
+
+    /**
      * Optional string attributes trimmed and collapsed to null when blank.
      *
      * @var list<string>
@@ -108,7 +120,6 @@ class Student extends Model
         'aadhaar_last4',
         'address_line',
         'city',
-        'state',
         'pincode',
         'previous_school',
         'previous_tc_no',
@@ -152,12 +163,29 @@ class Student extends Model
                 }
             }
 
+            $rawState = $student->getAttributes()['state'] ?? null;
+            if (is_string($rawState) && trim($rawState) === '') {
+                $student->setAttribute('state', null);
+            }
+
             $student->pendingSensitiveAuditFields = $student->detectSensitiveAuditFields();
         });
 
         static::saved(function (Student $student): void {
             $student->pendingSensitiveAuditFields = [];
         });
+    }
+
+    /**
+     * Collapse blank strings to null before enum casts validate values.
+     */
+    public function setAttribute($key, $value): mixed
+    {
+        if (in_array($key, self::NULLABLE_ENUM_FIELDS, true) && is_string($value) && trim($value) === '') {
+            $value = null;
+        }
+
+        return parent::setAttribute($key, $value);
     }
 
     /**
@@ -173,6 +201,7 @@ class Student extends Model
             'gender' => Gender::class,
             'social_category' => SocialCategory::class,
             'blood_group' => BloodGroup::class,
+            'state' => IndianState::class,
             'status' => StudentStatus::class,
             'consent_recorded_at' => 'datetime',
         ];
@@ -294,6 +323,8 @@ class Student extends Model
 
     /**
      * Get all guardians linked to this student.
+     *
+     * Read-only: never call attach() or sync(), which bypass ULID, school_id, audit logging, and primary-guardian guards. Use StudentGuardian actions instead.
      *
      * @return BelongsToMany<Guardian, $this>
      */

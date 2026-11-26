@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -55,6 +56,18 @@ class StudentGuardian extends Model
     protected $attributes = [
         'is_primary' => false,
     ];
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (StudentGuardian $studentGuardian): void {
+            if ($studentGuardian->exists && ($studentGuardian->isDirty('student_id') || $studentGuardian->isDirty('guardian_id'))) {
+                throw new LogicException('Cannot change the student or guardian of an existing link. Delete the link and create a new one instead.');
+            }
+        });
+    }
 
     /**
      * Get the attributes that should be cast.

@@ -90,6 +90,8 @@ class Guardian extends Model
     /**
      * Get all students linked to this guardian.
      *
+     * Read-only: never call attach() or sync(), which bypass ULID, school_id, audit logging, and primary-guardian guards. Use StudentGuardian actions instead.
+     *
      * @return BelongsToMany<Student, $this>
      */
     public function students(): BelongsToMany

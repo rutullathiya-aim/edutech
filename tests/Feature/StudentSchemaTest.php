@@ -3,6 +3,7 @@
 use App\Enums\BloodGroup;
 use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
+use App\Enums\IndianState;
 use App\Enums\SocialCategory;
 use App\Enums\StudentStatus;
 use App\Exceptions\NoCurrentSchoolException;
@@ -218,9 +219,14 @@ test('a student can have at most one primary guardian via generated flag and gua
         'is_primary' => false,
     ]))->toThrow(QueryException::class);
 
+    // Changing who an existing StudentGuardian links is forbidden.
+    $secondStudent = Student::factory()->for($school)->create();
+    expect(fn () => $motherLink->update(['student_id' => $secondStudent->id]))->toThrow(LogicException::class);
+    expect(fn () => $motherLink->fresh()?->update(['guardian_id' => $grandparent->id]))->toThrow(LogicException::class);
+
     // Switching primary guardian after clearing the current primary succeeds.
     $primaryLink->update(['is_primary' => false]);
-    $motherLink->update(['is_primary' => true]);
+    $motherLink->refresh()->update(['is_primary' => true]);
 
     expect($primaryLink->fresh()?->isPrimary())->toBeFalse()
         ->and($motherLink->fresh()?->isPrimary())->toBeTrue();
@@ -429,8 +435,13 @@ test('students and guardians trim text, normalize contacts, cast enums, and use 
         'religion' => '   ',
         'nationality' => '   ',
         'blood_group' => BloodGroup::OPos,
+        'state' => 'Maharashtra',
         'previous_school' => '  Sunrise Public School  ',
         'pincode' => '  400001  ',
+    ]);
+
+    $blankStateStudent = Student::factory()->for($school)->create([
+        'state' => '   ',
     ]);
 
     $guardian = Guardian::create([
@@ -445,6 +456,8 @@ test('students and guardians trim text, normalize contacts, cast enums, and use 
         ->and($student->name)->toBe('Aarav Verma')
         ->and($student->nationality)->toBe('Indian')
         ->and($student->religion)->toBeNull()
+        ->and($student->state)->toBe(IndianState::Maharashtra)
+        ->and($blankStateStudent->state)->toBeNull()
         ->and($student->previous_school)->toBe('Sunrise Public School')
         ->and($student->pincode)->toBe('400001')
         ->and($student->status)->toBe(StudentStatus::Active)

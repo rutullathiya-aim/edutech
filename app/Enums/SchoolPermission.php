@@ -14,4 +14,8 @@ enum SchoolPermission: string
     case SubjectsManage = 'subjects.manage';
     case StaffView = 'staff.view';
     case StaffManage = 'staff.manage';
+    case StudentsView = 'students.view';
+    case StudentsManage = 'students.manage';
+    case StudentsViewSensitive = 'students.view_sensitive';
+    case StudentsImport = 'students.import';
 }
