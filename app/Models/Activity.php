@@ -52,6 +52,15 @@ class Activity extends SpatieActivity
 
             $activity->school_id = $schoolId;
 
+            if ($activity->subject instanceof Student) {
+                $sensitiveFields = $activity->subject->consumeSensitiveAuditFields();
+
+                if ($sensitiveFields !== []) {
+                    $activity->properties = ($activity->properties ?? collect())
+                        ->put('sensitive_fields_changed', $sensitiveFields);
+                }
+            }
+
             if (app()->bound('request')) {
                 $request = request();
                 $activity->ip_address = $request->ip();

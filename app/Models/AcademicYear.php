@@ -125,6 +125,16 @@ class AcademicYear extends Model
     }
 
     /**
+     * Get all student enrollments in this academic year.
+     *
+     * @return HasMany<Enrollment, $this>
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    /**
      * Determine whether the academic year has been closed.
      */
     public function isClosed(): bool
