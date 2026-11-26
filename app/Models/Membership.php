@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
  * @property string $id
@@ -95,6 +96,44 @@ class Membership extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('status', MembershipStatus::Active);
+    }
+
+    /**
+     * Scope a query to memberships whose user holds at least one of the given roles in a school.
+     *
+     * @param  Builder<Membership>  $query
+     * @param  list<SchoolRole|string>|SchoolRole  $roles
+     */
+    public function scopeWithSchoolRole(Builder $query, array|SchoolRole $roles, ?string $schoolId = null): void
+    {
+        $roleList = is_array($roles) ? $roles : [$roles];
+        $roleNames = array_map(
+            static fn (SchoolRole|string $role): string => $role instanceof SchoolRole ? $role->value : $role,
+            $roleList,
+        );
+
+        if ($roleNames === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $table = $this->getTable();
+
+        $query->whereExists(static function (QueryBuilder $subQuery) use ($roleNames, $schoolId, $table): void {
+            $subQuery->selectRaw('1')
+                ->from('model_has_roles')
+                ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                ->whereColumn('model_has_roles.model_id', "{$table}.user_id")
+                ->where('model_has_roles.model_type', User::class)
+                ->whereIn('roles.name', $roleNames);
+
+            if ($schoolId !== null) {
+                $subQuery->where('model_has_roles.school_id', $schoolId);
+            } else {
+                $subQuery->whereColumn('model_has_roles.school_id', "{$table}.school_id");
+            }
+        });
     }
 
     /**

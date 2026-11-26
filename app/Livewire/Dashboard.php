@@ -14,7 +14,6 @@ use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -212,24 +211,15 @@ class Dashboard extends Component
         }
 
         $schoolId = $this->school->id;
-        $nonOwnerStaffRoles = [
-            SchoolRole::Admin->value,
-            SchoolRole::Accountant->value,
-            SchoolRole::Teacher->value,
-        ];
 
         return Membership::query()
             ->where('school_id', $schoolId)
             ->active()
-            ->whereExists(static function (QueryBuilder $query) use ($schoolId, $nonOwnerStaffRoles): void {
-                $query->selectRaw('1')
-                    ->from('model_has_roles')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->whereColumn('model_has_roles.model_id', 'memberships.user_id')
-                    ->where('model_has_roles.model_type', User::class)
-                    ->where('model_has_roles.school_id', $schoolId)
-                    ->whereIn('roles.name', $nonOwnerStaffRoles);
-            })
+            ->withSchoolRole([
+                SchoolRole::Admin,
+                SchoolRole::Accountant,
+                SchoolRole::Teacher,
+            ], $schoolId)
             ->exists();
     }
 

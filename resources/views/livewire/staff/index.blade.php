@@ -115,6 +115,7 @@
                                                     size="sm"
                                                     variant="danger"
                                                     wire:click="revokeInvitation('{{ $invitation->id }}')"
+                                                    wire:confirm="{{ __('Revoke the invitation for :name? They will no longer be able to accept it.', ['name' => $invitation->name]) }}"
                                                     data-test="revoke-invitation-{{ $invitation->id }}"
                                                 >
                                                     {{ __('Revoke') }}
@@ -192,6 +193,7 @@
                                                         size="sm"
                                                         variant="danger"
                                                         wire:click="disableMember('{{ $membership->id }}')"
+                                                        wire:confirm="{{ __('Disable :name? They will lose access immediately.', ['name' => $membership->user->name]) }}"
                                                         data-test="disable-member-{{ $membership->id }}"
                                                     >
                                                         {{ __('Disable') }}

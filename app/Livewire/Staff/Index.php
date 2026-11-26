@@ -19,7 +19,6 @@ use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Pagination\LengthAwarePaginator as EmptyPaginator;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
@@ -140,25 +139,12 @@ class Index extends Component
             ? MembershipStatus::Disabled
             : MembershipStatus::Active;
 
-        $staffRoleNames = array_map(
-            static fn (SchoolRole $staffRole): string => $staffRole->value,
-            SchoolRole::staffCases(),
-        );
-
         $like = $this->buildEscapedLikePattern();
 
         return Membership::query()
             ->where('school_id', $schoolId)
             ->where('status', $status)
-            ->whereExists(static function (QueryBuilder $query) use ($schoolId, $staffRoleNames): void {
-                $query->selectRaw('1')
-                    ->from('model_has_roles')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->whereColumn('model_has_roles.model_id', 'memberships.user_id')
-                    ->where('model_has_roles.model_type', User::class)
-                    ->where('model_has_roles.school_id', $schoolId)
-                    ->whereIn('roles.name', $staffRoleNames);
-            })
+            ->withSchoolRole(SchoolRole::staffCases(), $schoolId)
             ->when($like !== null, function (Builder $query) use ($like): void {
                 $query->whereHas('user', function (Builder $userQuery) use ($like): void {
                     $this->applyNameOrEmailSearch($userQuery, $like);

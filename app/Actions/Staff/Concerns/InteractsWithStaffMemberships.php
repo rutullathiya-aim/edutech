@@ -7,7 +7,6 @@ use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
@@ -40,15 +39,7 @@ trait InteractsWithStaffMemberships
             ->where('school_id', $school->id)
             ->active()
             ->whereKeyNot($lockedMembership->id)
-            ->whereExists(static function (QueryBuilder $query) use ($school): void {
-                $query->selectRaw('1')
-                    ->from('model_has_roles')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->whereColumn('model_has_roles.model_id', 'memberships.user_id')
-                    ->where('model_has_roles.model_type', User::class)
-                    ->where('model_has_roles.school_id', $school->id)
-                    ->where('roles.name', SchoolRole::Owner->value);
-            })
+            ->withSchoolRole(SchoolRole::Owner, $school->id)
             ->lockForUpdate()
             ->exists();
 

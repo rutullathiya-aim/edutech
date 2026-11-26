@@ -121,6 +121,7 @@ it('allows inviting, resending, and revoking via the staff screen while enforcin
 
     Livewire::test(StaffIndex::class)
         ->assertSee('Rohan_Teacher')
+        ->assertSee('wire:confirm="Disable Rohan_Teacher? They will lose access immediately."', false)
         ->assertSee('RohanXTeacher')
         ->assertDontSee('Parent ShouldNotAppear')
         ->set('search', '%')
@@ -179,6 +180,7 @@ it('allows inviting, resending, and revoking via the staff screen while enforcin
         ->assertDontSee('data-test="revoke-invitation-'.$adminInvitation->id.'"', false)
         ->assertSee('data-test="resend-invitation-'.$expiredTeacherInvite->id.'"', false)
         ->assertSee('data-test="revoke-invitation-'.$expiredTeacherInvite->id.'"', false)
+        ->assertSee('wire:confirm="Revoke the invitation for Expired Teacher? They will no longer be able to accept it."', false)
         ->call('revokeInvitation', $expiredTeacherInvite->id);
 
     expect($expiredTeacherInvite->fresh()->isRevoked())->toBeTrue();
@@ -452,4 +454,26 @@ it('executes a fixed number of database queries for the staff list whether a sch
     expect($largeQueryCount)
         ->toBe($smallQueryCount)
         ->toBeLessThanOrEqual(15);
+});
+
+it('filters memberships accurately by school role using withSchoolRole scope', function () {
+    $schoolA = School::factory()->active()->create();
+    $schoolB = School::factory()->active()->create();
+
+    ['membership' => $ownerA] = createStaffMember($schoolA, SchoolRole::Owner);
+    ['membership' => $teacherA] = createStaffMember($schoolA, SchoolRole::Teacher);
+    ['membership' => $parentA] = createStaffMember($schoolA, SchoolRole::Parent);
+    ['membership' => $teacherB] = createStaffMember($schoolB, SchoolRole::Teacher);
+
+    expect(Membership::query()->where('school_id', $schoolA->id)->withSchoolRole(SchoolRole::Owner)->pluck('id')->all())
+        ->toBe([$ownerA->id]);
+
+    expect(Membership::query()->withSchoolRole([SchoolRole::Teacher], $schoolA->id)->pluck('id')->all())
+        ->toBe([$teacherA->id]);
+
+    expect(Membership::query()->withSchoolRole(SchoolRole::staffCases(), $schoolA->id)->pluck('id')->all())
+        ->toEqualCanonicalizing([$ownerA->id, $teacherA->id])
+        ->not->toContain($parentA->id, $teacherB->id);
+
+    expect(Membership::query()->withSchoolRole([], $schoolA->id)->count())->toBe(0);
 });
