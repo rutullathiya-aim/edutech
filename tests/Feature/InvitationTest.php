@@ -6,6 +6,7 @@ use App\Models\Invitation;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Database\Eloquent\MassAssignmentException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -241,20 +242,34 @@ test('deleting the inviting user keeps the invitation with invited_by set to nul
         ->and($refreshed->invited_by)->toBeNull();
 });
 
-test('school_id, invited_by, token_hash, accepted_at, and revoked_at are not fillable', function () {
+test('school_id, invited_by, token_hash, accepted_at, accepted_by, last_sent_at, send_count, and revoked_at are not fillable', function () {
     $school = School::factory()->create();
 
     expect(fn () => new Invitation([
         'school_id' => $school->id,
         'invited_by' => '01ABCDEF',
+        'name' => 'Staff Member',
         'email' => 'staff@example.com',
         'role' => SchoolRole::Teacher,
         'token_hash' => 'injected_token',
         'accepted_at' => now(),
+        'accepted_by' => '01ABCDEF',
+        'last_sent_at' => now(),
+        'send_count' => 99,
         'revoked_at' => now(),
     ]))->toThrow(MassAssignmentException::class);
 
+    foreach (['accepted_by', 'last_sent_at', 'send_count'] as $protectedField) {
+        expect(fn () => new Invitation([
+            'name' => 'Staff Member',
+            'email' => 'staff@example.com',
+            'role' => SchoolRole::Teacher,
+            $protectedField => $protectedField === 'send_count' ? 5 : '01ABCDEF',
+        ]))->toThrow(MassAssignmentException::class);
+    }
+
     $invitation = new Invitation([
+        'name' => '  Priya Sharma  ',
         'email' => 'staff@example.com',
         'role' => SchoolRole::Teacher,
         'expires_at' => now()->addDays(3),
@@ -263,8 +278,12 @@ test('school_id, invited_by, token_hash, accepted_at, and revoked_at are not fil
     $invitation->token_hash = hash('sha256', 'valid_token');
     $invitation->save();
 
-    expect($invitation->fresh()->token_hash)->toBe(hash('sha256', 'valid_token'))
+    expect($invitation->fresh()->name)->toBe('Priya Sharma')
+        ->and($invitation->fresh()->token_hash)->toBe(hash('sha256', 'valid_token'))
         ->and($invitation->fresh()->accepted_at)->toBeNull()
+        ->and($invitation->fresh()->accepted_by)->toBeNull()
+        ->and($invitation->fresh()->send_count)->toBe(1)
+        ->and($invitation->fresh()->last_sent_at)->not->toBeNull()
         ->and($invitation->fresh()->revoked_at)->toBeNull();
 });
 
@@ -308,4 +327,72 @@ test('school_id cannot be changed once an invitation is created', function () {
     $invitation->school_id = $otherSchool->id;
 
     expect(fn () => $invitation->save())->toThrow(LogicException::class, 'The school_id cannot be changed once a record is created.');
+});
+
+test('open_flag enforces at most one open invitation per email per school while allowing other schools, closed history, and mobile invites', function () {
+    $schoolA = School::factory()->create();
+    $schoolB = School::factory()->create();
+
+    [$openA] = Invitation::createWithToken([
+        'school_id' => $schoolA->id,
+        'name' => 'Asha Rao',
+        'email' => 'asha@example.com',
+        'role' => SchoolRole::Teacher,
+    ]);
+
+    expect($openA->fresh()->open_flag)->toBe(1);
+
+    // Duplicate open invitation in the same school for the same email is rejected by DB unique index.
+    expect(fn () => Invitation::createWithToken([
+        'school_id' => $schoolA->id,
+        'name' => 'Asha Duplicate',
+        'email' => 'asha@example.com',
+        'role' => SchoolRole::Accountant,
+    ]))->toThrow(UniqueConstraintViolationException::class);
+
+    // Same email can have an open invitation in another school.
+    [$openB] = Invitation::createWithToken([
+        'school_id' => $schoolB->id,
+        'name' => 'Asha Rao',
+        'email' => 'asha@example.com',
+        'role' => SchoolRole::Teacher,
+    ]);
+    expect($openB->fresh()->open_flag)->toBe(1);
+
+    // Revoking clears open_flag so a fresh invitation for the same school + email is permitted.
+    $openA->revoke();
+    expect($openA->fresh()->open_flag)->toBeNull();
+
+    [$reinvitedA] = Invitation::createWithToken([
+        'school_id' => $schoolA->id,
+        'name' => 'Asha Rao',
+        'email' => 'asha@example.com',
+        'role' => SchoolRole::Teacher,
+    ]);
+    expect($reinvitedA->fresh()->open_flag)->toBe(1);
+
+    // Accepting clears open_flag and records accepted_by.
+    $acceptor = User::factory()->create(['email' => 'asha@example.com']);
+    $reinvitedA->accept($acceptor);
+    expect($reinvitedA->fresh()->open_flag)->toBeNull()
+        ->and($reinvitedA->fresh()->accepted_by)->toBe($acceptor->id);
+
+    // After acceptance, a new invitation for the same email in the same school is allowed at DB level.
+    [$thirdA] = Invitation::createWithToken([
+        'school_id' => $schoolA->id,
+        'name' => 'Asha Rao',
+        'email' => 'asha@example.com',
+        'role' => SchoolRole::Accountant,
+    ]);
+    expect($thirdA->fresh()->open_flag)->toBe(1);
+
+    // Multiple open mobile-only invitations (email = null) in the same school are allowed.
+    $mobileOne = Invitation::factory()->for($schoolA)->forMobile('+919876543211')->create();
+    $mobileTwo = Invitation::factory()->for($schoolA)->forMobile('+919876543212')->create();
+    expect($mobileOne->fresh()->open_flag)->toBe(1)
+        ->and($mobileTwo->fresh()->open_flag)->toBe(1);
+});
+
+test('activitylog globally excludes token_hash', function () {
+    expect(config('activitylog.default_except_attributes'))->toContain('token_hash');
 });

@@ -12,4 +12,6 @@ enum SchoolPermission: string
     case SectionsManage = 'sections.manage';
     case SubjectsView = 'subjects.view';
     case SubjectsManage = 'subjects.manage';
+    case StaffView = 'staff.view';
+    case StaffManage = 'staff.manage';
 }

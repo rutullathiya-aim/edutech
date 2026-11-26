@@ -8,6 +8,7 @@ use App\Enums\SchoolRole;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\ScopedBySchool;
 use App\Models\Scopes\SchoolScope;
+use App\Support\EmailMasker;
 use Carbon\CarbonInterface;
 use Database\Factories\InvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,20 +24,27 @@ use LogicException;
 /**
  * @property string $id
  * @property string $school_id
+ * @property string $name
  * @property string|null $email
  * @property string|null $mobile
  * @property SchoolRole $role
  * @property string $token_hash
  * @property string|null $invited_by
+ * @property CarbonInterface|null $last_sent_at
+ * @property int $send_count
  * @property CarbonInterface|null $expires_at
  * @property CarbonInterface|null $accepted_at
+ * @property string|null $accepted_by
  * @property CarbonInterface|null $revoked_at
+ * @property int|null $open_flag
  * @property CarbonInterface|null $created_at
  * @property CarbonInterface|null $updated_at
  * @property-read School $school
  * @property-read User|null $inviter
+ * @property-read User|null $acceptor
  */
 #[Fillable([
+    'name',
     'email',
     'mobile',
     'role',
@@ -49,6 +57,15 @@ class Invitation extends Model
     use BelongsToSchool, HasFactory, HasUlids, ScopedBySchool;
 
     /**
+     * The model's default values for attributes.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'send_count' => 1,
+    ];
+
+    /**
      * The "booted" method of the model.
      */
     protected static function booted(): void
@@ -57,6 +74,14 @@ class Invitation extends Model
             if (empty($invitation->expires_at)) {
                 $days = (int) config('invitations.expiry_days', 7);
                 $invitation->expires_at = now()->addDays($days);
+            }
+
+            $invitation->last_sent_at ??= now();
+        });
+
+        static::saving(function (Invitation $invitation): void {
+            if (array_key_exists('name', $invitation->getAttributes())) {
+                $invitation->name = trim((string) $invitation->getAttribute('name'));
             }
         });
     }
@@ -72,9 +97,12 @@ class Invitation extends Model
             'email' => NormalizedEmail::class,
             'mobile' => NormalizedMobile::class,
             'role' => SchoolRole::class,
+            'last_sent_at' => 'datetime',
+            'send_count' => 'integer',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
             'revoked_at' => 'datetime',
+            'open_flag' => 'integer',
         ];
     }
 
@@ -86,6 +114,16 @@ class Invitation extends Model
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');
+    }
+
+    /**
+     * Get the user who accepted the invitation.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function acceptor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'accepted_by');
     }
 
     /**
@@ -102,6 +140,18 @@ class Invitation extends Model
     }
 
     /**
+     * Scope query to open invitations (neither accepted nor revoked, including expired ones).
+     *
+     * @param  Builder<Invitation>  $query
+     * @return Builder<Invitation>
+     */
+    public function scopeOpen(Builder $query): Builder
+    {
+        return $query->whereNull('accepted_at')
+            ->whereNull('revoked_at');
+    }
+
+    /**
      * Check if the invitation is pending.
      */
     public function isPending(): bool
@@ -113,17 +163,56 @@ class Invitation extends Model
     }
 
     /**
+     * Determine whether the invitation has already been accepted.
+     */
+    public function isAccepted(): bool
+    {
+        return $this->accepted_at !== null;
+    }
+
+    /**
+     * Determine whether the invitation has been revoked.
+     */
+    public function isRevoked(): bool
+    {
+        return $this->revoked_at !== null;
+    }
+
+    /**
+     * Determine whether an open invitation has passed its expiry time.
+     */
+    public function isExpired(): bool
+    {
+        return ! $this->isAccepted()
+            && ! $this->isRevoked()
+            && ($this->expires_at === null || ! $this->expires_at->isFuture());
+    }
+
+    /**
+     * Return the masked version of the invitation's email address.
+     */
+    public function maskedEmail(): string
+    {
+        return EmailMasker::mask($this->email);
+    }
+
+    /**
      * Accept the invitation.
      *
      * @throws LogicException
      */
-    public function accept(): void
+    public function accept(?User $acceptedBy = null): void
     {
         if (! $this->isPending()) {
             throw new LogicException('Cannot accept an invitation that is not pending.');
         }
 
         $this->accepted_at = now();
+
+        if ($acceptedBy instanceof User) {
+            $this->accepted_by = $acceptedBy->id;
+        }
+
         $this->save();
     }
 

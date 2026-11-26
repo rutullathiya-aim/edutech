@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Models\User;
+use App\Support\EmailMasker;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -58,19 +59,7 @@ class AuditLogSubscriber
      */
     protected function maskEmail(string $email): string
     {
-        $parts = explode('@', $email, 2);
-        if (count($parts) !== 2) {
-            return '***';
-        }
-
-        $local = $parts[0];
-        $domain = $parts[1];
-
-        $maskedLocal = strlen($local) <= 2
-            ? substr($local, 0, 1).'***'
-            : substr($local, 0, 2).'***';
-
-        return $maskedLocal.'@'.$domain;
+        return EmailMasker::mask($email);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MembershipStatus;
+use App\Enums\SchoolRole;
 use App\Models\Concerns\BelongsToSchool;
 use Carbon\CarbonInterface;
 use Database\Factories\MembershipFactory;
@@ -64,6 +65,18 @@ class Membership extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Resolve the member's highest-ranking staff role within this membership's school.
+     */
+    public function staffRole(): ?SchoolRole
+    {
+        $user = $this->relationLoaded('user') ? $this->user : $this->user()->first();
+
+        return $user instanceof User
+            ? $user->staffRoleForSchool($this->school_id)
+            : null;
     }
 
     /**

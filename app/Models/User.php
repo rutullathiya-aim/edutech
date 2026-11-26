@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
 use App\Enums\MembershipStatus;
+use App\Enums\SchoolRole;
 use App\Notifications\ResetPasswordNotification;
 use App\Notifications\VerifyEmailNotification;
 use Carbon\CarbonInterface;
@@ -19,10 +20,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -194,6 +197,55 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function hasAnyMembership(): bool
     {
         return $this->memberships()->exists();
+    }
+
+    /**
+     * Resolve the user's highest-ranking staff role for the given school, if any.
+     */
+    public function staffRoleForSchool(string $schoolId): ?SchoolRole
+    {
+        if ($this->relationLoaded('roles') && getPermissionsTeamId() === $schoolId) {
+            /** @var SupportCollection<int, Role> $roles */
+            $roles = $this->roles;
+
+            return self::resolveHighestStaffRole($roles);
+        }
+
+        $previousTeamId = getPermissionsTeamId();
+        setPermissionsTeamId($schoolId);
+
+        try {
+            /** @var SupportCollection<int, Role> $roles */
+            $roles = $this->roles()->get();
+        } finally {
+            setPermissionsTeamId($previousTeamId);
+        }
+
+        return self::resolveHighestStaffRole($roles);
+    }
+
+    /**
+     * Pick the highest-ranking staff role from a collection of Spatie roles.
+     *
+     * @param  SupportCollection<int, Role>  $roles
+     */
+    private static function resolveHighestStaffRole(SupportCollection $roles): ?SchoolRole
+    {
+        $highestRole = null;
+
+        foreach ($roles as $role) {
+            $schoolRole = SchoolRole::tryFrom($role->name);
+
+            if ($schoolRole === null || ! $schoolRole->isStaff()) {
+                continue;
+            }
+
+            if ($highestRole === null || $schoolRole->rank() > $highestRole->rank()) {
+                $highestRole = $schoolRole;
+            }
+        }
+
+        return $highestRole;
     }
 
     /**

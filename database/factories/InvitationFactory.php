@@ -23,13 +23,17 @@ class InvitationFactory extends Factory
     {
         return [
             'school_id' => School::factory(),
+            'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'mobile' => null,
             'role' => SchoolRole::Teacher,
             'token_hash' => hash('sha256', Str::random(40)),
             'invited_by' => User::factory(),
+            'last_sent_at' => now(),
+            'send_count' => 1,
             'expires_at' => now()->addDays(7),
             'accepted_at' => null,
+            'accepted_by' => null,
             'revoked_at' => null,
         ];
     }
