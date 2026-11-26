@@ -7,11 +7,14 @@ use App\Listeners\AuditLogSubscriber;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Once;
 use Illuminate\Support\ServiceProvider;
@@ -34,6 +37,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        RateLimiter::for('invitation-token', function (Request $request): Limit {
+            return Limit::perMinute(10)->by($request->ip() ?? 'unknown');
+        });
 
         Event::subscribe(AuditLogSubscriber::class);
 

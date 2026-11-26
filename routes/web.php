@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\ShowInvitationController;
 use App\Http\Middleware\SetCurrentSchool;
 use App\Livewire\Dashboard;
+use App\Livewire\Invitations\Accept as AcceptInvitationPage;
 use App\Livewire\Schools\Index as SchoolsIndex;
 use App\Livewire\Schools\Register as SchoolsRegister;
 use App\Livewire\Setup\AcademicYears as SetupAcademicYears;
@@ -19,6 +21,13 @@ Route::view('/', 'welcome')->name('home');
 Route::livewire('register-school', SchoolsRegister::class)
     ->middleware('guest')
     ->name('schools.register');
+
+Route::livewire('invitations/accept', AcceptInvitationPage::class)
+    ->name('invitations.accept');
+
+Route::get('invitations/{token}', ShowInvitationController::class)
+    ->middleware('throttle:invitation-token')
+    ->name('invitations.show');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', fn () => to_route('schools.index'));

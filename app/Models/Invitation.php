@@ -39,7 +39,7 @@ use LogicException;
  * @property int|null $open_flag
  * @property CarbonInterface|null $created_at
  * @property CarbonInterface|null $updated_at
- * @property-read School $school
+ * @property-read School|null $school
  * @property-read User|null $inviter
  * @property-read User|null $acceptor
  */
