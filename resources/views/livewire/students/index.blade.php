@@ -5,17 +5,31 @@
             <flux:subheading>{{ __('Browse enrolled students, search by admission number or guardian mobile, and open student profiles.') }}</flux:subheading>
         </div>
 
-        @if ($this->canManage)
-            <flux:button
-                variant="primary"
-                icon="plus"
-                :href="route('students.create', ['school' => $this->school->id])"
-                wire:navigate
-                data-test="admit-student-button"
-            >
-                {{ __('Admit student') }}
-            </flux:button>
-        @endif
+        <div class="flex flex-wrap items-center gap-2">
+            @can('import', \App\Models\Student::class)
+                <flux:button
+                    variant="outline"
+                    icon="arrow-up-tray"
+                    :href="route('students.import', ['school' => $this->school->id])"
+                    wire:navigate
+                    data-test="import-students-button"
+                >
+                    {{ __('Import students') }}
+                </flux:button>
+            @endcan
+
+            @if ($this->canManage)
+                <flux:button
+                    variant="primary"
+                    icon="plus"
+                    :href="route('students.create', ['school' => $this->school->id])"
+                    wire:navigate
+                    data-test="admit-student-button"
+                >
+                    {{ __('Admit student') }}
+                </flux:button>
+            @endif
+        </div>
     </div>
 
     <flux:card class="space-y-4 p-5">

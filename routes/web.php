@@ -13,6 +13,7 @@ use App\Livewire\Setup\Subjects as SetupSubjects;
 use App\Livewire\Staff\Index as StaffIndex;
 use App\Livewire\Students\Create as StudentsCreate;
 use App\Livewire\Students\Edit as StudentsEdit;
+use App\Livewire\Students\Import as StudentsImport;
 use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Students\Show as StudentsShow;
 use App\Models\AcademicYear;
@@ -75,6 +76,10 @@ Route::prefix('{school}')
         Route::livewire('students/create', StudentsCreate::class)
             ->can('create', Student::class)
             ->name('students.create');
+
+        Route::livewire('students/import', StudentsImport::class)
+            ->can('import', Student::class)
+            ->name('students.import');
 
         Route::livewire('students/{student}', StudentsShow::class)
             ->whereUlid('student')
