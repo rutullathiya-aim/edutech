@@ -12,6 +12,7 @@ use App\Models\School;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
+use RuntimeException;
 
 class DemoSeeder extends Seeder
 {
@@ -20,6 +21,10 @@ class DemoSeeder extends Seeder
      */
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            throw new RuntimeException('DemoSeeder can only run in local or testing environments.');
+        }
+
         $this->call(RoleSeeder::class);
 
         $multiSchoolUser = $this->ensureUser('Test User', 'test@example.com');

@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->authenticateSessions();
         $middleware->append(SecurityHeaders::class);
+        $middleware->redirectUsersTo(fn (): string => route('schools.index'));
         $middleware->alias([
             'tenant' => SetCurrentSchool::class,
         ]);

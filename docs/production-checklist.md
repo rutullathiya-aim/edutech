@@ -43,6 +43,10 @@ This document details mandatory production security and operational requirements
 ---
 
 ## 4. Queues & Background Workers
-- [ ] **Queue Worker Process**: Run persistent queue workers (e.g. via Supervisor) in production (`php artisan queue:work`). Without a running worker, queued security notifications (password reset, email changed) will never send while the UI silently reports success.
+- [ ] **Seed Required Roles on Every Deploy**: Run `php artisan db:seed --class=RoleSeeder --force` on every deployment so the canonical `SchoolRole` entries exist in the database. Without the `Owner` role seeded, every school registration fails cleanly inside its transaction.
+- [ ] **Never Run `DemoSeeder` or Plain `db:seed` in Production**: `DemoSeeder` and plain `php artisan db:seed` must never be run on production servers (`DemoSeeder` explicitly throws outside `local`/`testing`, and `DatabaseSeeder` restricts test-user creation to `local`).
+- [ ] **Publish DPDP Legal Pages Before Pilot**: Publish Terms of Service and Privacy Policy pages reviewed by a CA/lawyer, link them from the `/register-school` consent checkbox, and bump `SCHOOL_TERMS_VERSION` whenever their wording changes.
+- [ ] **Scheduled Unverified Sign-Up Cleanup**: Schedule cleanup for abandoned trial schools whose owners have not verified their email within 7 days of registration.
+- [ ] **Queue Worker Process**: Run persistent queue workers (e.g. via Supervisor) in production (`php artisan queue:work`). Without a running worker, queued security and verification notifications (verification link, password reset, email changed) will never send while the UI silently reports success.
 - [ ] **Prune Failed Jobs**: Schedule `php artisan queue:prune-failed --hours=48` to prevent failed jobs from persisting indefinitely in `failed_jobs`.
-- [ ] **Encrypted Token Payloads**: Every queued job or notification that carries a sensitive token (password reset links, invitation links, OTPs) must implement `Illuminate\Contracts\Queue\ShouldBeEncrypted` so that payloads are encrypted with `APP_KEY` in the database.
+- [ ] **Encrypted Token Payloads**: Every queued job or notification that carries a sensitive token or signed link (email verification links, password reset links, invitation links, OTPs) must implement `Illuminate\Contracts\Queue\ShouldBeEncrypted` so that payloads are encrypted with `APP_KEY` in the database.

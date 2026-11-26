@@ -10,6 +10,7 @@ use Carbon\CarbonInterface;
 use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -160,5 +161,18 @@ class School extends Model
                         ->where("{$table}.trial_ends_at", '>=', now());
                 });
         });
+    }
+
+    /**
+     * Get the formatted "City, State" location label for the school.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function location(): Attribute
+    {
+        return Attribute::get(fn (): string => collect([
+            $this->city,
+            $this->state?->value,
+        ])->filter()->implode(', '));
     }
 }

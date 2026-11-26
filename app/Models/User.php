@@ -6,6 +6,7 @@ use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
 use App\Enums\MembershipStatus;
 use App\Notifications\ResetPasswordNotification;
+use App\Notifications\VerifyEmailNotification;
 use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -203,5 +204,13 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
     {
         $this->notify(new ResetPasswordNotification($token));
+    }
+
+    /**
+     * Send the email verification notification.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify((new VerifyEmailNotification)->afterCommit());
     }
 }

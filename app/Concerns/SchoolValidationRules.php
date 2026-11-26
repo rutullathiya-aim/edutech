@@ -117,9 +117,9 @@ trait SchoolValidationRules
      *
      * @return array<int, string>
      */
-    protected function schoolCityRules(): array
+    protected function schoolCityRules(bool $required = false): array
     {
-        return ['nullable', 'string', 'max:255'];
+        return [$required ? 'required' : 'nullable', 'string', 'max:255'];
     }
 
     /**
@@ -127,9 +127,9 @@ trait SchoolValidationRules
      *
      * @return array<int, Enum|string>
      */
-    protected function schoolStateRules(): array
+    protected function schoolStateRules(bool $required = false): array
     {
-        return ['nullable', Rule::enum(IndianState::class)];
+        return [$required ? 'required' : 'nullable', Rule::enum(IndianState::class)];
     }
 
     /**

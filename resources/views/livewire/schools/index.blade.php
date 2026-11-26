@@ -41,14 +41,8 @@
                             <div class="min-w-0">
                                 <flux:heading class="truncate">{{ $school->name }}</flux:heading>
 
-                                @php
-                                    $location = collect([$school->city, $school->state?->value])
-                                        ->filter()
-                                        ->implode(', ');
-                                @endphp
-
-                                @if ($location !== '')
-                                    <flux:text class="mt-0.5 truncate text-xs">{{ $location }}</flux:text>
+                                @if ($school->location !== '')
+                                    <flux:text class="mt-0.5 truncate text-xs">{{ $school->location }}</flux:text>
                                 @endif
                             </div>
                         </div>

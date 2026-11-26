@@ -57,10 +57,10 @@ trait ProfileValidationRules
      *
      * @return array<int, Unique|ValidationRule|array<mixed>|string>
      */
-    protected function mobileRules(string|int|null $userId = null): array
+    protected function mobileRules(string|int|null $userId = null, bool $required = false): array
     {
         return [
-            'nullable',
+            $required ? 'required' : 'nullable',
             'string',
             'regex:'.MobileNumber::REGEX,
             $userId === null

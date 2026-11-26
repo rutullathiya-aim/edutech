@@ -2,9 +2,14 @@
 
 use App\Http\Middleware\SetCurrentSchool;
 use App\Livewire\Schools\Index as SchoolsIndex;
+use App\Livewire\Schools\Register as SchoolsRegister;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
+
+Route::livewire('register-school', SchoolsRegister::class)
+    ->middleware('guest')
+    ->name('schools.register');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', fn () => to_route('schools.index'));
