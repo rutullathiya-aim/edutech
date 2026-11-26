@@ -23,7 +23,7 @@ use Spatie\Activitylog\Models\Activity as SpatieActivity;
  * @property string|null $ip_address
  * @property string|null $user_agent
  * @property Collection<string, mixed>|null $properties
- * @property array<string, mixed>|null $attribute_changes
+ * @property Collection<string, mixed>|null $attribute_changes
  * @property CarbonInterface|null $created_at
  * @property CarbonInterface|null $updated_at
  * @property-read School|null $school

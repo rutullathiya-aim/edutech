@@ -2,14 +2,17 @@
 
 namespace Database\Seeders;
 
+use App\Actions\AcademicYears\MakeAcademicYearCurrent;
 use App\Enums\IndianState;
 use App\Enums\MembershipStatus;
 use App\Enums\SchoolBoard;
 use App\Enums\SchoolRole;
 use App\Enums\SchoolStatus;
+use App\Models\AcademicYear;
 use App\Models\Membership;
 use App\Models\School;
 use App\Models\User;
+use App\Tenant\CurrentSchool;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use RuntimeException;
@@ -96,7 +99,43 @@ class DemoSeeder extends Seeder
         $this->ensureMembership($singleSchoolUser, $sunrise, MembershipStatus::Active, SchoolRole::Teacher);
         $this->ensureMembership($otherUser, $foreignSchool, MembershipStatus::Active, SchoolRole::Owner);
 
+        foreach ([$sunrise, $stXaviers, $greenValley, $suspendedSchool, $disabledMembershipSchool, $foreignSchool] as $school) {
+            $this->ensureDemoAcademicYears($school);
+        }
+
         setPermissionsTeamId(null);
+    }
+
+    /**
+     * Ensure each demo school has one past academic year (2025-26) and one current year (2026-27).
+     */
+    private function ensureDemoAcademicYears(School $school): void
+    {
+        CurrentSchool::set($school);
+
+        try {
+            AcademicYear::firstOrCreate(
+                ['name' => '2025-26'],
+                [
+                    'starts_on' => '2025-04-01',
+                    'ends_on' => '2026-03-31',
+                ],
+            );
+
+            $currentYear = AcademicYear::firstOrCreate(
+                ['name' => '2026-27'],
+                [
+                    'starts_on' => '2026-04-01',
+                    'ends_on' => '2027-03-31',
+                ],
+            );
+
+            if (! $currentYear->is_current && ! AcademicYear::current()->exists()) {
+                app(MakeAcademicYearCurrent::class)->handle($currentYear);
+            }
+        } finally {
+            CurrentSchool::forget();
+        }
     }
 
     /**

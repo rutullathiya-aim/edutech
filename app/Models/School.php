@@ -110,6 +110,16 @@ class School extends Model
     }
 
     /**
+     * Get all academic years belonging to the school.
+     *
+     * @return HasMany<AcademicYear, $this>
+     */
+    public function academicYears(): HasMany
+    {
+        return $this->hasMany(AcademicYear::class);
+    }
+
+    /**
      * Get all users belonging to the school (read-only: create memberships via the Membership model).
      *
      * @return BelongsToMany<User, $this>
