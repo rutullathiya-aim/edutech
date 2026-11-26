@@ -394,6 +394,13 @@ class Create extends Component
             ];
         }
 
+        $selectedYear = $this->academic_year_id !== ''
+            ? AcademicYear::query()->find($this->academic_year_id)
+            : null;
+        $enrolledOn = $selectedYear instanceof AcademicYear
+            ? $selectedYear->resolveEnrollmentDate($admissionDate)->toDateString()
+            : $admissionDate;
+
         $student = $admitStudent->handle(
             $actor,
             $studentPayload,
@@ -403,7 +410,7 @@ class Create extends Component
                 'grade_id' => $this->grade_id,
                 'section_id' => $this->section_id,
                 'roll_number' => $this->roll_number,
-                'enrolled_on' => $admissionDate,
+                'enrolled_on' => $enrolledOn,
             ],
             $this->consent_confirmed,
         );

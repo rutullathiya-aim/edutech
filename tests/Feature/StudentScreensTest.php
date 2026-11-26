@@ -23,6 +23,7 @@ use App\Models\Student;
 use App\Models\StudentGuardian;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
@@ -538,4 +539,66 @@ test('edit screen updates profile, changes section in place, manages guardians, 
         ->assertOk()
         ->assertSee('&lt;script&gt;', false)
         ->assertDontSee("<script>alert('xss')</script>", false);
+});
+
+test('admitting into a future open academic year uses the academic year start date for enrolled_on and shows validation summaries visibly', function () {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-11-26 10:00:00', 'Asia/Kolkata'));
+
+    try {
+        $school = School::factory()->active()->create();
+        $owner = createStudentScreenMember($school, SchoolRole::Owner);
+        $seeded = createSeededStudentInSchool($school);
+
+        CurrentSchool::set($school);
+        setPermissionsTeamId($school->id);
+
+        $futureYear = AcademicYear::factory()->for($school)->create([
+            'name' => '2027-28',
+            'starts_on' => '2027-04-01',
+            'ends_on' => '2028-03-31',
+            'is_current' => false,
+            'closed_at' => null,
+        ]);
+        $futureSection = Section::factory()->for($school)->for($futureYear)->for($seeded['grade'])->create(['name' => 'A']);
+
+        // Validation error renders visibly in the form error summary callout.
+        Livewire::actingAs($owner)
+            ->test(StudentsCreate::class)
+            ->assertSet('admission_date', '26/11/2026')
+            ->set('name', 'Future Student')
+            ->set('date_of_birth', '05/06/2018')
+            ->set('academic_year_id', $futureYear->id)
+            ->set('grade_id', $seeded['grade']->id)
+            ->set('section_id', $futureSection->id)
+            ->set('guardians.0.name', 'Suresh Patel')
+            ->set('guardians.0.mobile', '9876543219')
+            ->set('consent_confirmed', false)
+            ->call('save')
+            ->assertHasErrors(['consent_confirmed'])
+            ->assertSee('data-test="form-error-summary"', false);
+
+        // Confirming consent succeeds cleanly and sets enrolled_on to 2027-04-01 (starts_on of 2027-28).
+        Livewire::actingAs($owner)
+            ->test(StudentsCreate::class)
+            ->assertSet('admission_date', '26/11/2026')
+            ->set('name', 'Future Student')
+            ->set('date_of_birth', '05/06/2018')
+            ->set('academic_year_id', $futureYear->id)
+            ->set('grade_id', $seeded['grade']->id)
+            ->set('section_id', $futureSection->id)
+            ->set('guardians.0.name', 'Suresh Patel')
+            ->set('guardians.0.mobile', '9876543219')
+            ->set('consent_confirmed', true)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $admittedStudent = Student::query()->where('name', 'Future Student')->firstOrFail();
+        $enrollment = $admittedStudent->enrollments()->firstOrFail();
+
+        expect($admittedStudent->admission_date->toDateString())->toBe('2026-11-26')
+            ->and($enrollment->academic_year_id)->toBe($futureYear->id)
+            ->and($enrollment->enrolled_on->toDateString())->toBe('2027-04-01');
+    } finally {
+        CarbonImmutable::setTestNow();
+    }
 });

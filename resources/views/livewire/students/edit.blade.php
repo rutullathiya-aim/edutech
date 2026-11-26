@@ -21,6 +21,19 @@
     </div>
 
     {{-- Section A: Profile --}}
+    @if ($errors->any())
+        <flux:callout variant="danger" icon="exclamation-triangle" data-test="form-error-summary">
+            <flux:callout.heading>{{ __('Please fix the following errors before saving.') }}</flux:callout.heading>
+            <flux:callout.text>
+                <ul class="mt-1 list-disc space-y-0.5 ps-5 text-sm">
+                    @foreach ($errors->all() as $message)
+                        <li>{{ $message }}</li>
+                    @endforeach
+                </ul>
+            </flux:callout.text>
+        </flux:callout>
+    @endif
+
     <form wire:submit="saveProfile" class="space-y-6">
         <flux:card class="space-y-4 p-6">
             <flux:heading size="lg">{{ __('Profile details') }}</flux:heading>

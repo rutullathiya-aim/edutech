@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\ScopedBySchool;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\AcademicYearFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -140,6 +141,26 @@ class AcademicYear extends Model
     public function isClosed(): bool
     {
         return $this->closed_at !== null;
+    }
+
+    /**
+     * Resolve the effective enrollment date within this academic year's bounds.
+     *
+     * Uses the later of the admission date and starts_on, capped at ends_on.
+     */
+    public function resolveEnrollmentDate(CarbonInterface|string $admissionDate): CarbonImmutable
+    {
+        $date = CarbonImmutable::parse($admissionDate)->startOfDay();
+
+        if ($date->lessThan($this->starts_on)) {
+            return $this->starts_on->startOfDay();
+        }
+
+        if ($date->greaterThan($this->ends_on)) {
+            return $this->ends_on->startOfDay();
+        }
+
+        return $date;
     }
 
     /**

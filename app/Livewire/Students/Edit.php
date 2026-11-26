@@ -429,6 +429,7 @@ class Edit extends Component
         }
 
         $student = Student::query()->findOrFail($this->studentId);
+        $this->authorize('update', $student);
         $guardian = Guardian::query()->findOrFail($guardianId);
 
         $setPrimaryGuardian->handle($actor, $student, $guardian);
@@ -449,6 +450,7 @@ class Edit extends Component
         }
 
         $student = Student::query()->findOrFail($this->studentId);
+        $this->authorize('update', $student);
         $guardian = Guardian::query()->findOrFail($guardianId);
 
         $detachGuardian->handle($actor, $student, $guardian);
@@ -485,6 +487,7 @@ class Edit extends Component
         }
 
         $student = Student::query()->findOrFail($this->studentId);
+        $this->authorize('update', $student);
         $guardian = Guardian::query()->findOrFail($this->detachingPrimaryGuardianId);
         $replacement = $this->replacementPrimaryGuardianId !== ''
             ? Guardian::query()->findOrFail($this->replacementPrimaryGuardianId)
