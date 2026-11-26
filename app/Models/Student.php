@@ -83,6 +83,19 @@ class Student extends Model
     }
 
     /**
+     * Sensitive attributes gated by the students.view_sensitive permission.
+     *
+     * @var list<string>
+     */
+    public const array VIEW_SENSITIVE_FIELDS = [
+        'social_category',
+        'religion',
+        'apaar_id',
+        'pen',
+        'aadhaar_last4',
+    ];
+
+    /**
      * Sensitive attributes whose values must never be recorded in activity_log.
      *
      * @var list<string>

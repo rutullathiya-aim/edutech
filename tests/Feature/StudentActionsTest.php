@@ -11,6 +11,7 @@ use App\Enums\BloodGroup;
 use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Enums\IndianState;
+use App\Enums\SchoolPermission;
 use App\Enums\SchoolRole;
 use App\Enums\SocialCategory;
 use App\Enums\StudentStatus;
@@ -32,6 +33,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 beforeEach(function (): void {
@@ -182,7 +184,10 @@ test('non-managing roles are forbidden from executing student, guardian, or enro
     CurrentSchool::set($school);
     setPermissionsTeamId($school->id);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $grade = Grade::factory()->for($school)->create();
     $sectionA = Section::factory()->for($school)->for($year)->for($grade)->create(['name' => 'A']);
     $sectionB = Section::factory()->for($school)->for($year)->for($grade)->create(['name' => 'B']);
@@ -248,7 +253,10 @@ test('actions reject cross-school student, guardian, year, and section IDs', fun
     setPermissionsTeamId($schoolA->id);
     $this->actingAs($ownerA);
 
-    $yearA = AcademicYear::factory()->for($schoolA)->current()->create();
+    $yearA = AcademicYear::factory()->for($schoolA)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $gradeA = Grade::factory()->for($schoolA)->create();
     $sectionA = Section::factory()->for($schoolA)->for($yearA)->for($gradeA)->create();
     $studentA = Student::factory()->for($schoolA)->create();
@@ -311,7 +319,10 @@ test('admitting and updating students never leak sensitive field values into act
     setPermissionsTeamId($school->id);
     $this->actingAs($owner);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $grade = Grade::factory()->for($school)->create();
     $section = Section::factory()->for($school)->for($year)->for($grade)->create();
 
@@ -375,7 +386,10 @@ test('admit student is all or nothing when the enrollment step fails', function 
     setPermissionsTeamId($school->id);
     $this->actingAs($owner);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $grade = Grade::factory()->for($school)->create();
     $section = Section::factory()->for($school)->for($year)->for($grade)->create();
 
@@ -410,7 +424,10 @@ test('admit student enforces consent, primary contact, guardian mobile, normaliz
     setPermissionsTeamId($school->id);
     $this->actingAs($owner);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $gradeA = Grade::factory()->for($school)->create(['name' => 'Grade 1']);
     $gradeB = Grade::factory()->for($school)->create(['name' => 'Grade 2']);
     $sectionA = Section::factory()->for($school)->for($year)->for($gradeA)->create();
@@ -437,6 +454,51 @@ test('admit student enforces consent, primary contact, guardian mobile, normaliz
         validStudentPayload(),
         [['name' => 'Ramesh Patel', 'mobile' => null, 'relationship' => 'father', 'is_primary' => true]],
         ['academic_year_id' => $year->id, 'section_id' => $sectionA->id],
+        true,
+    ))->toThrow(ValidationException::class);
+
+    // Primary guardian without mobile rejected even when a secondary guardian has a mobile.
+    expect(fn () => (new AdmitStudent)->handle(
+        $owner,
+        validStudentPayload(),
+        [
+            ['name' => 'Ramesh Patel', 'mobile' => null, 'relationship' => 'father', 'is_primary' => true],
+            ['name' => 'Meena Patel', 'mobile' => '9876543210', 'relationship' => 'mother', 'is_primary' => false],
+        ],
+        ['academic_year_id' => $year->id, 'section_id' => $sectionA->id],
+        true,
+    ))->toThrow(ValidationException::class);
+
+    // Date sanity: admission_date before DOB, far in future, and enrolled_on outside academic year bounds rejected.
+    expect(fn () => (new AdmitStudent)->handle(
+        $owner,
+        validStudentPayload(['date_of_birth' => '2016-06-15', 'admission_date' => '2016-06-14']),
+        $validGuardian,
+        ['academic_year_id' => $year->id, 'section_id' => $sectionA->id],
+        true,
+    ))->toThrow(ValidationException::class);
+
+    expect(fn () => (new AdmitStudent)->handle(
+        $owner,
+        validStudentPayload(['admission_date' => '2062-04-01']),
+        $validGuardian,
+        ['academic_year_id' => $year->id, 'section_id' => $sectionA->id],
+        true,
+    ))->toThrow(ValidationException::class);
+
+    expect(fn () => (new AdmitStudent)->handle(
+        $owner,
+        validStudentPayload(),
+        $validGuardian,
+        ['academic_year_id' => $year->id, 'section_id' => $sectionA->id, 'enrolled_on' => '2025-03-15'],
+        true,
+    ))->toThrow(ValidationException::class);
+
+    expect(fn () => (new AdmitStudent)->handle(
+        $owner,
+        validStudentPayload(),
+        $validGuardian,
+        ['academic_year_id' => $year->id, 'section_id' => $sectionA->id, 'enrolled_on' => '2027-04-05'],
         true,
     ))->toThrow(ValidationException::class);
 
@@ -541,7 +603,10 @@ test('sibling admission shares the existing guardian row and guardian actions pr
     setPermissionsTeamId($school->id);
     $this->actingAs($owner);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $grade = Grade::factory()->for($school)->create();
     $section = Section::factory()->for($school)->for($year)->for($grade)->create();
 
@@ -595,7 +660,7 @@ test('sibling admission shares the existing guardian row and guardian actions pr
     expect(fn () => (new DetachGuardian)->handle($owner, $firstChild, $father, $mother))
         ->toThrow(ValidationException::class);
 
-    // Add aunt with mobile as new primary, switch primary, then detach father cleanly while naming aunt as primary.
+    // Add aunt with mobile as secondary, refuse setting primary to mobile-less mother, refuse replacing primary with mother.
     $auntLink = (new AttachGuardian)->handle($owner, $firstChild, [
         'name' => 'Kavita Patel',
         'mobile' => '9876543299',
@@ -612,16 +677,25 @@ test('sibling admission shares the existing guardian row and guardian actions pr
         'is_primary' => false,
     ]))->toThrow(ValidationException::class);
 
-    (new SetPrimaryGuardian)->handle($owner, $firstChild, $mother);
+    // Switching primary to a guardian without a mobile is refused even when another guardian has a mobile.
+    expect(fn () => (new SetPrimaryGuardian)->handle($owner, $firstChild, $mother))
+        ->toThrow(ValidationException::class);
 
-    expect($motherLink->fresh()?->isPrimary())->toBeTrue()
+    // Detaching father while naming mobile-less mother as replacement is refused even though aunt has a mobile.
+    expect(fn () => (new DetachGuardian)->handle($owner, $firstChild, $father, $mother))
+        ->toThrow(ValidationException::class);
+
+    // Switching primary to aunt (who has a mobile) succeeds.
+    (new SetPrimaryGuardian)->handle($owner, $firstChild, $aunt);
+
+    expect($auntLink->fresh()?->isPrimary())->toBeTrue()
         ->and($firstChild->studentGuardians()->where('is_primary', true)->count())->toBe(1);
 
-    // Detach current primary (mother) while assigning aunt as replacement primary.
-    (new DetachGuardian)->handle($owner, $firstChild, $mother, $aunt);
+    // Detach current primary (aunt) while assigning father (with mobile) as replacement primary.
+    (new DetachGuardian)->handle($owner, $firstChild, $aunt, $father);
 
     expect($firstChild->studentGuardians()->count())->toBe(2)
-        ->and($auntLink->fresh()?->isPrimary())->toBeTrue();
+        ->and($father->studentGuardians()->where('student_id', $firstChild->id)->first()?->isPrimary())->toBeTrue();
 });
 
 test('change section updates enrollment in place within the same year and blocks cross-year or archived transfers', function () {
@@ -690,7 +764,10 @@ test('suggest admission number preserves prefix and zero padding, handles collis
     setPermissionsTeamId($school->id);
     $this->actingAs($owner);
 
-    $year = AcademicYear::factory()->for($school)->current()->create();
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
     $grade = Grade::factory()->for($school)->create();
     $section = Section::factory()->for($school)->for($year)->for($grade)->create();
 
@@ -783,4 +860,58 @@ test('suggest admission number preserves prefix and zero padding, handles collis
 
     expect(Guardian::query()->count())->toBe($guardiansBeforeRace)
         ->and(Enrollment::query()->count())->toBe($enrollmentsBeforeRace);
+});
+
+test('update student preserves sensitive fields when actor holds students.manage without students.view_sensitive', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    setPermissionsTeamId(null);
+    $clerkRole = Role::firstOrCreate([
+        'name' => 'Office Clerk',
+        'guard_name' => 'web',
+        'school_id' => null,
+    ]);
+    $clerkRole->syncPermissions([
+        SchoolPermission::StudentsView->value,
+        SchoolPermission::StudentsManage->value,
+    ]);
+
+    $clerk = User::factory()->create();
+    setPermissionsTeamId($school->id);
+    $clerk->assignRole($clerkRole);
+    $clerk->unsetRelation('roles', 'permissions');
+
+    $student = Student::factory()->for($school)->create([
+        'admission_no' => 'CLK-001',
+        'admission_date' => '2026-04-01',
+        'name' => 'Riya Nair',
+        'date_of_birth' => '2016-05-10',
+        'social_category' => SocialCategory::Sc,
+        'religion' => 'Hindu',
+        'apaar_id' => '111122223333',
+        'pen' => '11223344556',
+        'aadhaar_last4' => '9988',
+    ]);
+
+    $this->actingAs($clerk);
+
+    $updated = (new UpdateStudent)->handle($clerk, $student, validStudentPayload([
+        'admission_no' => 'CLK-001',
+        'admission_date' => '2026-04-01',
+        'name' => 'Riya S. Nair',
+        'date_of_birth' => '2016-05-10',
+        'social_category' => SocialCategory::General->value,
+        'religion' => 'Christian',
+        'apaar_id' => '999988887777',
+        'pen' => '99887766554',
+        'aadhaar_last4' => '1234',
+    ]));
+
+    expect($updated->name)->toBe('Riya S. Nair')
+        ->and($updated->social_category)->toBe(SocialCategory::Sc)
+        ->and($updated->religion)->toBe('Hindu')
+        ->and($updated->apaar_id)->toBe('111122223333')
+        ->and($updated->pen)->toBe('11223344556')
+        ->and($updated->aadhaar_last4)->toBe('9988');
 });

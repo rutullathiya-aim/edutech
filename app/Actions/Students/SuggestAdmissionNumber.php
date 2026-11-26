@@ -12,13 +12,11 @@ class SuggestAdmissionNumber
     /**
      * Suggest the next sequential admission number for the current school based on its latest admission number or a seed.
      */
-    public function handle(?User $actor = null, ?string $seedAdmissionNo = null): ?string
+    public function handle(User $actor, ?string $seedAdmissionNo = null): ?string
     {
         $school = CurrentSchool::getOrFail();
 
-        if ($actor instanceof User) {
-            Gate::forUser($actor)->authorize('create', Student::class);
-        }
+        Gate::forUser($actor)->authorize('create', Student::class);
 
         $baseAdmissionNo = $seedAdmissionNo !== null && trim($seedAdmissionNo) !== ''
             ? trim($seedAdmissionNo)

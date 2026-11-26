@@ -87,7 +87,7 @@ class ChangeSection
                 return $lockedEnrollment->refresh();
             });
         } catch (QueryException $exception) {
-            $this->rethrowFriendlyStudentConstraintException($exception, '');
+            $this->rethrowFriendlyStudentConstraintException($actor, $exception, '');
         }
     }
 }

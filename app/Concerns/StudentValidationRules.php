@@ -17,12 +17,14 @@ use App\Support\MobileNumber;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Closure;
+use DateTimeInterface;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Rules\Unique;
+use Throwable;
 
 trait StudentValidationRules
 {
@@ -93,8 +95,11 @@ trait StudentValidationRules
      *
      * @return array<string, array<int, Closure|Enum|Unique|ValidationRule|string>>
      */
-    protected function studentProfileRules(string $schoolId, ?string $ignoreStudentId = null): array
-    {
+    protected function studentProfileRules(
+        string $schoolId,
+        ?string $ignoreStudentId = null,
+        mixed $dateOfBirth = null,
+    ): array {
         $uniqueAdmissionRule = Rule::unique(Student::class, 'admission_no')
             ->where(fn ($query) => $query->where('school_id', $schoolId));
 
@@ -108,7 +113,7 @@ trait StudentValidationRules
 
         return [
             'admission_no' => ['required', 'string', 'max:30', $uniqueAdmissionRule],
-            'admission_date' => ['required', 'date'],
+            'admission_date' => $this->studentAdmissionDateRules($dateOfBirth),
             'name' => ['required', 'string', 'max:150'],
             'date_of_birth' => $this->studentDateOfBirthRules(),
             'gender' => ['required', Rule::enum(Gender::class)],
@@ -130,6 +135,46 @@ trait StudentValidationRules
     }
 
     /**
+     * Get validation rules for admission date (on or after date of birth, and not more than one year in the future).
+     *
+     * @return array<int, Closure|string>
+     */
+    protected function studentAdmissionDateRules(mixed $dateOfBirth = null): array
+    {
+        return [
+            'bail',
+            'required',
+            'date',
+            static function (string $attribute, mixed $value, Closure $fail) use ($dateOfBirth): void {
+                if (! is_string($value) && ! $value instanceof DateTimeInterface) {
+                    return;
+                }
+
+                $admissionDate = CarbonImmutable::parse($value)->startOfDay();
+                $maxAllowedDate = CarbonImmutable::today()->addYear()->startOfDay();
+
+                if ($admissionDate->greaterThan($maxAllowedDate)) {
+                    $fail('The admission date cannot be more than one year in the future.');
+
+                    return;
+                }
+
+                if (is_string($dateOfBirth) || $dateOfBirth instanceof DateTimeInterface) {
+                    try {
+                        $dob = CarbonImmutable::parse($dateOfBirth)->startOfDay();
+                    } catch (Throwable) {
+                        return;
+                    }
+
+                    if ($admissionDate->lessThan($dob)) {
+                        $fail('The admission date must be on or after the date of birth.');
+                    }
+                }
+            },
+        ];
+    }
+
+    /**
      * Get validation rules for student date of birth (in the past, student aged 2 to 20 years).
      *
      * @return array<int, Closure|string>
@@ -142,7 +187,7 @@ trait StudentValidationRules
             'date',
             'before:today',
             static function (string $attribute, mixed $value, Closure $fail): void {
-                if (! is_string($value) && ! $value instanceof \DateTimeInterface) {
+                if (! is_string($value) && ! $value instanceof DateTimeInterface) {
                     return;
                 }
 
@@ -243,7 +288,28 @@ trait StudentValidationRules
                 },
             ],
             'roll_number' => ['nullable', 'integer', 'min:1', 'max:65535', $rollUniqueRule],
-            'enrolled_on' => ['required', 'date'],
+            'enrolled_on' => [
+                'bail',
+                'required',
+                'date',
+                static function (string $attribute, mixed $value, Closure $fail) use ($academicYearId): void {
+                    if ($academicYearId === null || (! is_string($value) && ! $value instanceof DateTimeInterface)) {
+                        return;
+                    }
+
+                    $academicYear = AcademicYear::find($academicYearId);
+
+                    if (! $academicYear instanceof AcademicYear) {
+                        return;
+                    }
+
+                    $enrolledOn = CarbonImmutable::parse($value)->startOfDay();
+
+                    if ($enrolledOn->lessThan($academicYear->starts_on) || $enrolledOn->greaterThan($academicYear->ends_on)) {
+                        $fail('The enrollment date must fall within the selected academic year.');
+                    }
+                },
+            ],
         ];
     }
 }

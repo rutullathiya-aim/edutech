@@ -8,7 +8,9 @@ use App\Models\Student;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class UpdateStudent
 {
@@ -30,9 +32,18 @@ class UpdateStudent
             return DB::transaction(function () use ($actor, $student, $school, $normalized, $attemptedAdmissionNo): Student {
                 $lockedStudent = $this->lockAndAuthorizeStudent($actor, $student);
 
+                $payload = Gate::forUser($actor)->allows('viewSensitive', $lockedStudent)
+                    ? $normalized
+                    : Arr::except($normalized, Student::VIEW_SENSITIVE_FIELDS);
+
                 $validated = $this->validateWithFriendlyAdmissionSuggestion(
-                    $normalized,
-                    $this->studentProfileRules($school->id, $lockedStudent->id),
+                    $actor,
+                    $payload,
+                    $this->studentProfileRules(
+                        $school->id,
+                        $lockedStudent->id,
+                        $payload['date_of_birth'] ?? null,
+                    ),
                     $attemptedAdmissionNo,
                     $lockedStudent->id,
                 );
@@ -46,7 +57,7 @@ class UpdateStudent
                 return $lockedStudent->refresh();
             });
         } catch (QueryException $exception) {
-            $this->rethrowFriendlyStudentConstraintException($exception, $attemptedAdmissionNo);
+            $this->rethrowFriendlyStudentConstraintException($actor, $exception, $attemptedAdmissionNo);
         }
     }
 }

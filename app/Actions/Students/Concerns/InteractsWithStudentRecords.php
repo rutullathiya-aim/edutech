@@ -9,6 +9,8 @@ use App\Models\Section;
 use App\Models\Student;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
@@ -34,10 +36,13 @@ trait InteractsWithStudentRecords
     }
 
     /**
-     * Lock and verify that a target section belongs to the open academic year and an unarchived grade.
+     * Lock and verify that a target section belongs to the open academic year, date window, and an unarchived grade.
      */
-    protected function lockAndVerifyEnrollableSection(string $academicYearId, string $sectionId): Section
-    {
+    protected function lockAndVerifyEnrollableSection(
+        string $academicYearId,
+        string $sectionId,
+        DateTimeInterface|string|null $enrolledOn = null,
+    ): Section {
         $academicYear = AcademicYear::query()
             ->whereKey($academicYearId)
             ->lockForUpdate()
@@ -47,6 +52,16 @@ trait InteractsWithStudentRecords
             throw ValidationException::withMessages([
                 'academic_year_id' => __('Cannot enroll a student in a closed academic year.'),
             ]);
+        }
+
+        if ($enrolledOn !== null) {
+            $date = CarbonImmutable::parse($enrolledOn)->startOfDay();
+
+            if ($date->lessThan($academicYear->starts_on) || $date->greaterThan($academicYear->ends_on)) {
+                throw ValidationException::withMessages([
+                    'enrolled_on' => __('The enrollment date must fall within the selected academic year.'),
+                ]);
+            }
         }
 
         $section = Section::query()
@@ -77,6 +92,7 @@ trait InteractsWithStudentRecords
      * @return array<string, mixed>
      */
     protected function validateWithFriendlyAdmissionSuggestion(
+        User $actor,
         array $payload,
         array $rules,
         string $attemptedAdmissionNo,
@@ -95,7 +111,7 @@ trait InteractsWithStudentRecords
 
                 if ($collisionExists) {
                     $errors->forget('admission_no');
-                    $errors->add('admission_no', $this->buildAdmissionTakenMessage($attemptedAdmissionNo));
+                    $errors->add('admission_no', $this->buildAdmissionTakenMessage($actor, $attemptedAdmissionNo));
                 }
             }
 
@@ -108,9 +124,9 @@ trait InteractsWithStudentRecords
     /**
      * Build a friendly admission number collision message with a next suggestion when available.
      */
-    protected function buildAdmissionTakenMessage(string $attemptedAdmissionNo): string
+    protected function buildAdmissionTakenMessage(User $actor, string $attemptedAdmissionNo): string
     {
-        $suggestion = (new SuggestAdmissionNumber)->handle(null, $attemptedAdmissionNo);
+        $suggestion = (new SuggestAdmissionNumber)->handle($actor, $attemptedAdmissionNo);
 
         if ($suggestion !== null) {
             return __('Admission number :no is already taken, try :suggestion.', [
@@ -130,8 +146,11 @@ trait InteractsWithStudentRecords
      * @throws QueryException
      * @throws ValidationException
      */
-    protected function rethrowFriendlyStudentConstraintException(QueryException $exception, string $attemptedAdmissionNo): never
-    {
+    protected function rethrowFriendlyStudentConstraintException(
+        User $actor,
+        QueryException $exception,
+        string $attemptedAdmissionNo,
+    ): never {
         $message = $exception->getMessage();
 
         if (
@@ -139,7 +158,7 @@ trait InteractsWithStudentRecords
             || str_contains($message, 'students.admission_no')
         ) {
             throw ValidationException::withMessages([
-                'admission_no' => $this->buildAdmissionTakenMessage($attemptedAdmissionNo),
+                'admission_no' => $this->buildAdmissionTakenMessage($actor, $attemptedAdmissionNo),
             ]);
         }
 

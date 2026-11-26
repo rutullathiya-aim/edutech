@@ -68,6 +68,20 @@ class AttachGuardian
                 ]);
             }
 
+            $isPrimary = (bool) ($validated['is_primary'] ?? false);
+
+            if ($existingLinks->isEmpty() && ! $isPrimary) {
+                throw ValidationException::withMessages([
+                    'is_primary' => __('The student\'s first guardian must be marked as primary contact.'),
+                ]);
+            }
+
+            if ($isPrimary && $guardian->mobile === null) {
+                throw ValidationException::withMessages([
+                    'mobile' => __('The primary guardian must have a mobile number.'),
+                ]);
+            }
+
             $existingHasMobile = $existingLinks->isNotEmpty()
                 && Guardian::query()
                     ->whereIn('id', $existingLinks->pluck('guardian_id')->all())
@@ -77,14 +91,6 @@ class AttachGuardian
             if ($guardian->mobile === null && ! $existingHasMobile) {
                 throw ValidationException::withMessages([
                     'mobile' => __('At least one guardian mobile number is required.'),
-                ]);
-            }
-
-            $isPrimary = (bool) ($validated['is_primary'] ?? false);
-
-            if ($existingLinks->isEmpty() && ! $isPrimary) {
-                throw ValidationException::withMessages([
-                    'is_primary' => __('The student\'s first guardian must be marked as primary contact.'),
                 ]);
             }
 

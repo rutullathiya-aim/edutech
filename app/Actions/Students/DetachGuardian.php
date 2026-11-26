@@ -88,6 +88,12 @@ class DetachGuardian
                     ]);
                 }
 
+                if ($lockedReplacementGuardian->mobile === null) {
+                    throw ValidationException::withMessages([
+                        'new_primary_guardian_id' => __('The replacement primary guardian must have a mobile number.'),
+                    ]);
+                }
+
                 $targetLink->delete();
                 $replacementLink->update(['is_primary' => true]);
 

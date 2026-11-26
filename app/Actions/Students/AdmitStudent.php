@@ -57,7 +57,7 @@ class AdmitStudent
             : null;
 
         $rules = array_merge(
-            $this->studentProfileRules($school->id),
+            $this->studentProfileRules($school->id, null, $normalizedStudent['date_of_birth'] ?? null),
             $this->enrollmentPlacementRules($school->id, $academicYearId, $sectionId, $gradeId),
             $this->admitGuardiansRules($school->id),
             ['consent_confirmed' => ['required', 'accepted']],
@@ -69,14 +69,17 @@ class AdmitStudent
         ]);
 
         $attemptedAdmissionNo = (string) ($normalizedStudent['admission_no'] ?? '');
-        $validated = $this->validateWithFriendlyAdmissionSuggestion($payload, $rules, $attemptedAdmissionNo);
+        $validated = $this->validateWithFriendlyAdmissionSuggestion($actor, $payload, $rules, $attemptedAdmissionNo);
         $this->assertGuardianInvariants($normalizedGuardians);
 
         try {
             return DB::transaction(function () use ($actor, $validated, $normalizedGuardians): Student {
+                $enrolledOn = (string) $validated['enrolled_on'];
+
                 $section = $this->lockAndVerifyEnrollableSection(
                     (string) $validated['academic_year_id'],
                     (string) $validated['section_id'],
+                    $enrolledOn,
                 );
 
                 $student = new Student($this->extractStudentAttributes($validated));
@@ -116,7 +119,7 @@ class AdmitStudent
                     'section_id' => $section->id,
                     'roll_number' => $validated['roll_number'] ?? null,
                     'status' => EnrollmentStatus::Active,
-                    'enrolled_on' => $validated['enrolled_on'],
+                    'enrolled_on' => $enrolledOn,
                 ]);
 
                 return $student->load([
@@ -127,7 +130,7 @@ class AdmitStudent
                 ]);
             });
         } catch (QueryException $exception) {
-            $this->rethrowFriendlyStudentConstraintException($exception, $attemptedAdmissionNo);
+            $this->rethrowFriendlyStudentConstraintException($actor, $exception, $attemptedAdmissionNo);
         }
     }
 
@@ -182,17 +185,17 @@ class AdmitStudent
     }
 
     /**
-     * Verify primary guardian, duplicate guardian link, and at-least-one-mobile invariants.
+     * Verify primary guardian, duplicate guardian link, and primary-mobile invariants.
      *
      * @param  list<array<string, mixed>>  $normalizedGuardians
      */
     private function assertGuardianInvariants(array $normalizedGuardians): void
     {
-        $primaryCount = collect($normalizedGuardians)
+        $primaryGuardians = collect($normalizedGuardians)
             ->filter(fn (array $guardian): bool => (bool) ($guardian['is_primary'] ?? false))
-            ->count();
+            ->values();
 
-        if ($primaryCount !== 1) {
+        if ($primaryGuardians->count() !== 1) {
             throw ValidationException::withMessages([
                 'guardians' => __('Exactly one guardian must be marked as the primary contact.'),
             ]);
@@ -209,18 +212,17 @@ class AdmitStudent
             ]);
         }
 
-        $hasInlineMobile = collect($normalizedGuardians)
-            ->contains(fn (array $guardian): bool => is_string($guardian['mobile'] ?? null) && $guardian['mobile'] !== '');
+        /** @var array<string, mixed> $primaryGuardian */
+        $primaryGuardian = $primaryGuardians->first();
+        $primaryGuardianId = $primaryGuardian['guardian_id'] ?? null;
 
-        $hasExistingMobile = $linkedGuardianIds->isNotEmpty()
-            && Guardian::query()
-                ->whereIn('id', $linkedGuardianIds->all())
-                ->whereNotNull('mobile')
-                ->exists();
+        $primaryHasMobile = is_string($primaryGuardianId) && $primaryGuardianId !== ''
+            ? Guardian::query()->whereKey($primaryGuardianId)->whereNotNull('mobile')->exists()
+            : is_string($primaryGuardian['mobile'] ?? null) && $primaryGuardian['mobile'] !== '';
 
-        if (! $hasInlineMobile && ! $hasExistingMobile) {
+        if (! $primaryHasMobile) {
             throw ValidationException::withMessages([
-                'guardians' => __('At least one guardian mobile number is required.'),
+                'guardians' => __('The primary guardian must have a mobile number.'),
             ]);
         }
     }

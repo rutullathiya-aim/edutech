@@ -47,6 +47,12 @@ class SetPrimaryGuardian
                 return $targetLink->load('guardian');
             }
 
+            if ($lockedGuardian->mobile === null) {
+                throw ValidationException::withMessages([
+                    'guardian_id' => __('The primary guardian must have a mobile number.'),
+                ]);
+            }
+
             foreach ($allLinks->where('is_primary', true) as $currentPrimary) {
                 $currentPrimary->update(['is_primary' => false]);
             }
