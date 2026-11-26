@@ -61,10 +61,17 @@ class Register extends Component
         $normalizedEmail = Str::lower(trim($this->email));
 
         $successKey = 'register-school-success:'.$ip;
+        $ipAttemptKey = 'register-school-ip-attempt:'.$ip;
         $attemptKey = 'register-school-attempt:'.$ip.'|'.$normalizedEmail;
 
         if (RateLimiter::tooManyAttempts($successKey, 3)) {
             $this->addThrottleError($successKey);
+
+            return;
+        }
+
+        if (RateLimiter::tooManyAttempts($ipAttemptKey, 30)) {
+            $this->addThrottleError($ipAttemptKey);
 
             return;
         }
@@ -75,6 +82,7 @@ class Register extends Component
             return;
         }
 
+        RateLimiter::hit($ipAttemptKey, 3600);
         RateLimiter::hit($attemptKey, 3600);
 
         $this->school_name = trim($this->school_name);
@@ -171,6 +179,8 @@ class Register extends Component
      */
     private function addThrottleError(string $key): void
     {
+        $this->reset('password', 'password_confirmation');
+
         $seconds = RateLimiter::availableIn($key);
 
         $this->addError('throttle', __('Too many registration attempts. Please try again in :minutes minutes.', [

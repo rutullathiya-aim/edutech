@@ -273,6 +273,30 @@ it('refuses the fourth successful registration from the same IP within a day', f
     $this->assertDatabaseMissing('schools', ['name' => 'Fourth Rate School']);
 });
 
+it('blocks the 31st attempt from one IP within an hour even with different emails', function () {
+    $this->seed(RoleSeeder::class);
+    Notification::fake();
+
+    for ($attempt = 1; $attempt <= 30; $attempt++) {
+        Livewire::test(Register::class)
+            ->set(validSchoolRegistrationPayload([
+                'email' => "enum{$attempt}@nalanda.edu.in",
+                'mobile' => '12345',
+            ]))
+            ->call('register')
+            ->assertHasErrors(['mobile']);
+    }
+
+    Livewire::test(Register::class)
+        ->set(validSchoolRegistrationPayload([
+            'email' => 'enum31@nalanda.edu.in',
+        ]))
+        ->call('register')
+        ->assertHasErrors(['throttle']);
+
+    $this->assertDatabaseCount('schools', 0);
+});
+
 it('clears password fields when registration validation fails', function () {
     $this->seed(RoleSeeder::class);
 
