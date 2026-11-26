@@ -6,9 +6,11 @@ use App\Livewire\Schools\Register as SchoolsRegister;
 use App\Livewire\Setup\AcademicYears as SetupAcademicYears;
 use App\Livewire\Setup\Grades as SetupGrades;
 use App\Livewire\Setup\Sections as SetupSections;
+use App\Livewire\Setup\Subjects as SetupSubjects;
 use App\Models\AcademicYear;
 use App\Models\Grade;
 use App\Models\Section;
+use App\Models\Subject;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -40,6 +42,10 @@ Route::prefix('{school}')
         Route::livewire('setup/sections', SetupSections::class)
             ->can('viewAny', Section::class)
             ->name('setup.sections');
+
+        Route::livewire('setup/subjects', SetupSubjects::class)
+            ->can('viewAny', Subject::class)
+            ->name('setup.subjects');
     });
 
 require __DIR__.'/settings.php';

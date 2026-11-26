@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Grade;
 use App\Models\School;
 use App\Models\Section;
+use App\Models\Subject;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Database\Seeders\PermissionSeeder;
@@ -132,7 +133,7 @@ test('permission seeder creates all setup permissions idempotently', function ()
     $this->seed(PermissionSeeder::class);
 
     expect(Role::count())->toBe(6)
-        ->and(Permission::count())->toBe(6)
+        ->and(Permission::count())->toBe(8)
         ->and(Permission::pluck('name')->sort()->values()->all())->toBe([
             'academic_years.manage',
             'academic_years.view',
@@ -140,6 +141,8 @@ test('permission seeder creates all setup permissions idempotently', function ()
             'grades.view',
             'sections.manage',
             'sections.view',
+            'subjects.manage',
+            'subjects.view',
         ]);
 });
 
@@ -175,6 +178,8 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsView,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsView,
+            SchoolPermission::SubjectsManage,
         ],
         [],
     ],
@@ -187,6 +192,8 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsView,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsView,
+            SchoolPermission::SubjectsManage,
         ],
         [],
     ],
@@ -196,11 +203,13 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::AcademicYearsView,
             SchoolPermission::GradesView,
             SchoolPermission::SectionsView,
+            SchoolPermission::SubjectsView,
         ],
         [
             SchoolPermission::AcademicYearsManage,
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsManage,
         ],
     ],
     'Teacher' => [
@@ -209,11 +218,13 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::AcademicYearsView,
             SchoolPermission::GradesView,
             SchoolPermission::SectionsView,
+            SchoolPermission::SubjectsView,
         ],
         [
             SchoolPermission::AcademicYearsManage,
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsManage,
         ],
     ],
     'Parent' => [
@@ -226,6 +237,8 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsView,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsView,
+            SchoolPermission::SubjectsManage,
         ],
     ],
     'Student' => [
@@ -238,6 +251,8 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::GradesManage,
             SchoolPermission::SectionsView,
             SchoolPermission::SectionsManage,
+            SchoolPermission::SubjectsView,
+            SchoolPermission::SubjectsManage,
         ],
     ],
 ]);
@@ -262,11 +277,13 @@ test('policies enforce current school, matching team ID, permissions, and record
     $yearA = AcademicYear::factory()->for($schoolA)->create();
     $gradeA = Grade::factory()->for($schoolA)->create();
     $sectionA = Section::factory()->for($schoolA)->for($yearA)->for($gradeA)->create();
+    $subjectA = Subject::factory()->for($schoolA)->create();
 
     CurrentSchool::set($schoolB);
     $yearB = AcademicYear::factory()->for($schoolB)->create();
     $gradeB = Grade::factory()->for($schoolB)->create();
     $sectionB = Section::factory()->for($schoolB)->for($yearB)->for($gradeB)->create();
+    $subjectB = Subject::factory()->for($schoolB)->create();
 
     // Fails closed without CurrentSchool or mismatched team ID
     CurrentSchool::forget();
@@ -274,14 +291,16 @@ test('policies enforce current school, matching team ID, permissions, and record
     $owner->unsetRelation('roles', 'permissions');
     expect($owner->can('viewAny', AcademicYear::class))->toBeFalse()
         ->and($owner->can('viewAny', Grade::class))->toBeFalse()
-        ->and($owner->can('viewAny', Section::class))->toBeFalse();
+        ->and($owner->can('viewAny', Section::class))->toBeFalse()
+        ->and($owner->can('viewAny', Subject::class))->toBeFalse();
 
     CurrentSchool::set($schoolA);
     setPermissionsTeamId($schoolB->id);
     $owner->unsetRelation('roles', 'permissions');
     expect($owner->can('viewAny', AcademicYear::class))->toBeFalse()
         ->and($owner->can('create', Grade::class))->toBeFalse()
-        ->and($owner->can('create', Section::class))->toBeFalse();
+        ->and($owner->can('create', Section::class))->toBeFalse()
+        ->and($owner->can('create', Subject::class))->toBeFalse();
 
     // Valid School A context
     setPermissionsTeamId($schoolA->id);
@@ -305,6 +324,14 @@ test('policies enforce current school, matching team ID, permissions, and record
         ->and($owner->can('delete', $sectionA))->toBeTrue()
         ->and($owner->can('update', $sectionB))->toBeFalse()
         ->and($owner->can('delete', $sectionB))->toBeFalse()
+        ->and($owner->can('viewAny', Subject::class))->toBeTrue()
+        ->and($owner->can('create', Subject::class))->toBeTrue()
+        ->and($owner->can('update', $subjectA))->toBeTrue()
+        ->and($owner->can('archive', $subjectA))->toBeTrue()
+        ->and($owner->can('restore', $subjectA))->toBeTrue()
+        ->and($owner->can('manageCurriculum', Subject::class))->toBeTrue()
+        ->and($owner->can('delete', $subjectA))->toBeFalse()
+        ->and($owner->can('update', $subjectB))->toBeFalse()
         ->and($teacher->can('viewAny', AcademicYear::class))->toBeTrue()
         ->and($teacher->can('create', AcademicYear::class))->toBeFalse()
         ->and($teacher->can('update', $yearA))->toBeFalse()
@@ -314,5 +341,9 @@ test('policies enforce current school, matching team ID, permissions, and record
         ->and($teacher->can('viewAny', Section::class))->toBeTrue()
         ->and($teacher->can('create', Section::class))->toBeFalse()
         ->and($teacher->can('update', $sectionA))->toBeFalse()
-        ->and($teacher->can('delete', $sectionA))->toBeFalse();
+        ->and($teacher->can('delete', $sectionA))->toBeFalse()
+        ->and($teacher->can('viewAny', Subject::class))->toBeTrue()
+        ->and($teacher->can('create', Subject::class))->toBeFalse()
+        ->and($teacher->can('archive', $subjectA))->toBeFalse()
+        ->and($teacher->can('manageCurriculum', Subject::class))->toBeFalse();
 });

@@ -205,6 +205,9 @@ class Sections extends Component
                 return;
             }
 
+            // Academic year is immutable after creation so existing enrollments cannot shift years.
+            $this->academic_year_id = $section->academic_year_id;
+
             /** @var array{academic_year_id: string, grade_id: string, name: string, capacity: int|string|null, room: string|null} $validated */
             $validated = $this->validate($this->sectionRules($this->academic_year_id, $this->grade_id, $section->id));
             $validated['capacity'] = $validated['capacity'] !== null ? (int) $validated['capacity'] : null;
@@ -246,20 +249,19 @@ class Sections extends Component
     }
 
     /**
-     * Delete a section belonging to an open academic year in the current school.
+     * Delete the section targeted by the confirmation modal in an open academic year.
      */
-    public function delete(?string $sectionId = null): void
+    public function delete(): void
     {
-        $targetId = $sectionId ?? $this->deletingId;
+        $this->authorize('delete', Section::class);
 
-        if ($targetId === null) {
-            $this->authorize('create', Section::class);
+        if ($this->deletingId === null) {
             $this->resetDeleteModal();
 
             return;
         }
 
-        $section = Section::findOrFail($targetId);
+        $section = Section::findOrFail($this->deletingId);
         $this->authorize('delete', $section);
 
         if ($section->academicYear->isClosed()) {

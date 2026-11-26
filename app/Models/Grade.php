@@ -72,6 +72,16 @@ class Grade extends Model
     }
 
     /**
+     * Get all curriculum subject assignments belonging to this grade.
+     *
+     * @return HasMany<GradeSubject, $this>
+     */
+    public function gradeSubjects(): HasMany
+    {
+        return $this->hasMany(GradeSubject::class);
+    }
+
+    /**
      * Determine whether the grade has been archived.
      */
     public function isArchived(): bool

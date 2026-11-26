@@ -134,7 +134,7 @@ it('forbids Teacher and Accountant from mutating sections through Livewire actio
         ->assertForbidden();
 
     Livewire::test(Sections::class)
-        ->call('delete', $section->id)
+        ->call('delete')
         ->assertForbidden();
 
     expect(Section::count())->toBe(1);
@@ -344,8 +344,7 @@ it('keeps a closed academic year read-only on the sections screen', function () 
         ->call('save')
         ->assertHasErrors(['academic_year_id'])
         ->call('confirmDelete', $closedSection->id)
-        ->assertSet('showDeleteModal', false)
-        ->call('delete', $closedSection->id);
+        ->assertSet('showDeleteModal', false);
 
     expect($closedSection->fresh())->not->toBeNull()
         ->and(Section::where('academic_year_id', $yearToClose->id)->count())->toBe(1);
@@ -369,10 +368,6 @@ it('blocks IDOR attempts against another schools section in Livewire and over HT
         ->call('confirmDelete', $sectionB->id)
         ->assertNotFound();
 
-    Livewire::test(Sections::class)
-        ->call('delete', $sectionB->id)
-        ->assertNotFound();
-
     $pageResponse = $this->actingAs($ownerA)
         ->get(route('setup.sections', ['school' => $schoolA->id]))
         ->assertOk();
@@ -391,7 +386,7 @@ it('blocks IDOR attempts against another schools section in Livewire and over HT
                     'snapshot' => json_encode($snapshot),
                     'updates' => [],
                     'calls' => [
-                        ['path' => '', 'method' => 'delete', 'params' => [$sectionB->id]],
+                        ['path' => '', 'method' => 'confirmDelete', 'params' => [$sectionB->id]],
                     ],
                 ],
             ],

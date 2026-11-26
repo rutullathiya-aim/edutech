@@ -4,6 +4,7 @@ namespace App\Models\Concerns;
 
 use App\Models\Scopes\SchoolScope;
 use App\Tenant\CurrentSchool;
+use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
 /**
@@ -42,5 +43,32 @@ trait ScopedBySchool
                 }
             }
         });
+    }
+
+    /**
+     * Resolve a parent school-owned model within the current school or matching school_id.
+     *
+     * @template TModel of Model
+     *
+     * @param  class-string<TModel>  $modelClass
+     * @return TModel|null
+     */
+    protected function resolveParentModel(string $modelClass, ?string $id): ?Model
+    {
+        if ($id === null) {
+            return null;
+        }
+
+        if (CurrentSchool::check()) {
+            return $modelClass::find($id);
+        }
+
+        if (empty($this->school_id)) {
+            return null;
+        }
+
+        return $modelClass::withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $this->school_id)
+            ->find($id);
     }
 }

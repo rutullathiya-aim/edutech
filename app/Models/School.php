@@ -130,6 +130,16 @@ class School extends Model
     }
 
     /**
+     * Get all subjects belonging to the school.
+     *
+     * @return HasMany<Subject, $this>
+     */
+    public function subjects(): HasMany
+    {
+        return $this->hasMany(Subject::class);
+    }
+
+    /**
      * Get all users belonging to the school (read-only: create memberships via the Membership model).
      *
      * @return BelongsToMany<User, $this>

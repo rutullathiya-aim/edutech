@@ -4,8 +4,6 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\ScopedBySchool;
-use App\Models\Scopes\SchoolScope;
-use App\Tenant\CurrentSchool;
 use Carbon\CarbonImmutable;
 use Database\Factories\SectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -75,33 +73,6 @@ class Section extends Model
                 throw new LogicException('Cannot delete a section in a closed academic year.');
             }
         });
-    }
-
-    /**
-     * Resolve a parent school-owned model within the current school or matching school_id.
-     *
-     * @template TModel of Model
-     *
-     * @param  class-string<TModel>  $modelClass
-     * @return TModel|null
-     */
-    private function resolveParentModel(string $modelClass, ?string $id): ?Model
-    {
-        if ($id === null) {
-            return null;
-        }
-
-        if (CurrentSchool::check()) {
-            return $modelClass::find($id);
-        }
-
-        if (empty($this->school_id)) {
-            return null;
-        }
-
-        return $modelClass::withoutGlobalScope(SchoolScope::class)
-            ->where('school_id', $this->school_id)
-            ->find($id);
     }
 
     /**

@@ -28,6 +28,7 @@
                 auth()->user()?->can('viewAny', \App\Models\AcademicYear::class)
                 || auth()->user()?->can('viewAny', \App\Models\Grade::class)
                 || auth()->user()?->can('viewAny', \App\Models\Section::class)
+                || auth()->user()?->can('viewAny', \App\Models\Subject::class)
             )
             <flux:sidebar.group :heading="__('School setup')" class="grid" data-test="school-setup-sidebar-group">
                 @can('viewAny', \App\Models\AcademicYear::class)
@@ -57,6 +58,16 @@
                     :current="request()->routeIs('setup.sections')"
                     wire:navigate>
                     {{ __('Sections') }}
+                </flux:sidebar.item>
+                @endcan
+
+                @can('viewAny', \App\Models\Subject::class)
+                <flux:sidebar.item
+                    icon="book-open"
+                    :href="route('setup.subjects', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
+                    :current="request()->routeIs('setup.subjects')"
+                    wire:navigate>
+                    {{ __('Subjects') }}
                 </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>

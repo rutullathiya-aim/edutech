@@ -44,10 +44,12 @@ class SectionPolicy
     }
 
     /**
-     * Determine whether the user can delete a specific section.
+     * Determine whether the user can delete sections in the current school or a specific section.
      */
-    public function delete(User $user, Section $section): bool
+    public function delete(User $user, ?Section $section = null): bool
     {
-        return $this->canForSchoolRecord($user, SchoolPermission::SectionsManage, $section->school_id);
+        return $section instanceof Section
+            ? $this->canForSchoolRecord($user, SchoolPermission::SectionsManage, $section->school_id)
+            : $this->canForCurrentSchool($user, SchoolPermission::SectionsManage);
     }
 }
