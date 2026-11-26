@@ -50,7 +50,7 @@
             </div>
 
             <flux:badge color="zinc" size="sm" data-test="checklist-progress">
-                {{ __(':completed of 5 complete', ['completed' => $this->completedChecklistCount]) }}
+                {{ __(':completed of :total complete', ['completed' => $this->completedChecklistCount, 'total' => count($this->checklistSteps)]) }}
             </flux:badge>
         </div>
 

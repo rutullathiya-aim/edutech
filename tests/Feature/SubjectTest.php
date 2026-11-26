@@ -448,16 +448,16 @@ it('preserves grade subject IDs on repeated syncs and updates or deletes only ch
         ['subject_id' => $sanskrit->id, 'is_optional' => true, 'sort_order' => 3],
     ])->keyBy('subject_id');
 
-    $newAudits = Activity::where('log_name', 'grade_subject')
-        ->skip($auditCountAfterInitial)
-        ->take(10)
-        ->get();
+    $updateAudit = Activity::where('log_name', 'grade_subject')
+        ->where('event', 'updated')
+        ->where('subject_id', $sanskritRowId)
+        ->first();
 
     expect($third->get($sanskrit->id)?->id)->toBe($sanskritRowId)
         ->and($third->get($sanskrit->id)?->is_optional)->toBeTrue()
-        ->and($newAudits)->toHaveCount(1)
-        ->and($newAudits->first()?->event)->toBe('updated')
-        ->and($newAudits->first()?->subject_id)->toBe($sanskritRowId);
+        ->and(Activity::where('log_name', 'grade_subject')->count())->toBe($auditCountAfterInitial + 1)
+        ->and($updateAudit)->not->toBeNull()
+        ->and($updateAudit?->subject_id)->toBe($sanskritRowId);
 
     // Removing Mathematics deletes only that row while keeping English and Sanskrit IDs intact
     $fourth = $sync->handle($grade, [

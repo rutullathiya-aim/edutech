@@ -12,6 +12,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -32,6 +33,10 @@ use Livewire\Component;
 #[Title('Dashboard')]
 class Dashboard extends Component
 {
+    private bool $currentAcademicYearLoaded = false;
+
+    private ?AcademicYear $resolvedCurrentAcademicYear = null;
+
     /**
      * Get the currently scoped school.
      */
@@ -47,13 +52,18 @@ class Dashboard extends Component
     #[Computed]
     public function currentAcademicYear(): ?AcademicYear
     {
-        return AcademicYear::query()
-            ->current()
-            ->first();
+        if (! $this->currentAcademicYearLoaded) {
+            $this->resolvedCurrentAcademicYear = AcademicYear::query()
+                ->current()
+                ->first();
+            $this->currentAcademicYearLoaded = true;
+        }
+
+        return $this->resolvedCurrentAcademicYear;
     }
 
     /**
-     * Calculate whole remaining trial days rounded up, or null if not in an active trial.
+     * Calculate remaining calendar trial days in the school's timezone (defaulting to Asia/Kolkata), or null if expired/inactive.
      */
     #[Computed]
     public function trialDaysRemaining(): ?int
@@ -64,13 +74,16 @@ class Dashboard extends Component
             return null;
         }
 
-        $secondsRemaining = now()->diffInSeconds($school->trial_ends_at, false);
-
-        if ($secondsRemaining < 0) {
+        if ($school->trial_ends_at->lt(now())) {
             return null;
         }
 
-        return (int) ceil($secondsRemaining / 86400);
+        $timezone = $school->timezone ?: 'Asia/Kolkata';
+        $today = now($timezone)->startOfDay();
+        $endDate = $school->trial_ends_at->timezone($timezone)->startOfDay();
+        $daysRemaining = (int) round($today->diffInDays($endDate, false));
+
+        return $daysRemaining >= 0 ? $daysRemaining : null;
     }
 
     /**
@@ -176,7 +189,11 @@ class Dashboard extends Component
 
         return Grade::query()
             ->active()
-            ->whereDoesntHave('gradeSubjects')
+            ->whereDoesntHave('gradeSubjects', static function (Builder $query): void {
+                $query->whereHas('subject', static function (Builder $subjectQuery): void {
+                    $subjectQuery->active();
+                });
+            })
             ->doesntExist();
     }
 

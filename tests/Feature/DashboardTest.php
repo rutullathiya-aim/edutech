@@ -13,6 +13,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
@@ -97,7 +98,7 @@ it('displays school header metadata and current academic year or warning', funct
 
 it('shows the trial banner only to Owner and Admin on trial schools', function () {
     $trialSchool = School::factory()->create([
-        'trial_ends_at' => now()->addDays(14),
+        'trial_ends_at' => now('Asia/Kolkata')->addDays(14)->endOfDay()->startOfSecond()->utc(),
     ]);
 
     $owner = setupUserForDashboard($trialSchool, SchoolRole::Owner);
@@ -401,6 +402,85 @@ it('executes a constant number of database queries regardless of grade count', f
     expect($largeSchoolQueryCount)
         ->toBe($smallSchoolQueryCount)
         ->toBeLessThanOrEqual(15);
+});
+
+it('shows ends today when a trial ends later today in India time even across UTC midnight', function () {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-11-26 14:00:00', 'Asia/Kolkata'));
+
+    try {
+        $sameDayTrialSchool = School::factory()->create([
+            'trial_ends_at' => now('Asia/Kolkata')->addHours(3)->utc(),
+        ]);
+        $owner = setupUserForDashboard($sameDayTrialSchool, SchoolRole::Owner);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard', ['school' => $sameDayTrialSchool->id]))
+            ->assertOk()
+            ->assertSee('data-test="trial-banner"', false)
+            ->assertSee('Your trial ends today')
+            ->assertDontSee('ends in 1 day');
+
+        // 20:00 UTC on Nov 26 is 01:30 IST on Nov 27: still ends today in Asia/Kolkata.
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-11-26 20:00:00', 'UTC'));
+
+        $istCrossMidnightSchool = School::factory()->create([
+            'trial_ends_at' => CarbonImmutable::parse('2026-11-27 23:59:59', 'Asia/Kolkata')->utc(),
+        ]);
+        $secondOwner = setupUserForDashboard($istCrossMidnightSchool, SchoolRole::Owner);
+
+        $this->actingAs($secondOwner)
+            ->get(route('dashboard', ['school' => $istCrossMidnightSchool->id]))
+            ->assertOk()
+            ->assertSee('Your trial ends today')
+            ->assertDontSee('ends in 1 day');
+    } finally {
+        CarbonImmutable::setTestNow();
+    }
+});
+
+it('keeps the curriculum checklist step incomplete when a grade only has archived subjects', function () {
+    $school = School::factory()->active()->create();
+    $owner = setupUserForDashboard($school, SchoolRole::Owner);
+
+    CurrentSchool::set($school);
+    $year = AcademicYear::factory()->for($school)->create(['is_current' => true]);
+    $grade = Grade::factory()->for($school)->create();
+    Section::factory()->for($school)->for($year, 'academicYear')->for($grade)->create(['name' => 'A']);
+
+    Subject::factory()->for($school)->create(['name' => 'Mathematics']);
+    $archivedSubject = Subject::factory()->for($school)->create(['name' => 'Old Sanskrit']);
+    GradeSubject::factory()->for($school)->for($grade)->for($archivedSubject)->create();
+
+    $archivedSubject->archived_at = now();
+    $archivedSubject->save();
+    CurrentSchool::forget();
+
+    $this->actingAs($owner)
+        ->get(route('dashboard', ['school' => $school->id]))
+        ->assertOk()
+        ->assertSee('data-test="setup-checklist"', false)
+        ->assertSee('4 of 5 complete')
+        ->assertSeeInOrder(['data-test="checklist-step-subjects"', '✅', 'data-test="checklist-step-curriculum"', '⬜']);
+});
+
+it('queries the current academic year at most once when a school has no current year', function () {
+    $school = School::factory()->active()->create();
+    $owner = setupUserForDashboard($school, SchoolRole::Owner);
+
+    $this->actingAs($owner)->get(route('dashboard', ['school' => $school->id]))->assertOk();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $this->actingAs($owner)->get(route('dashboard', ['school' => $school->id]))->assertOk();
+    $queries = DB::getQueryLog();
+    DB::disableQueryLog();
+
+    $academicYearQueries = array_filter(
+        $queries,
+        static fn (array $entry): bool => str_contains($entry['query'], 'academic_years'),
+    );
+
+    expect($academicYearQueries)->toHaveCount(1);
 });
 
 it('renders a clean landing page and sidebar without starter-kit links', function () {

@@ -50,7 +50,9 @@ class RegisterSchool
                 'board' => filled($input['board'] ?? null) ? $input['board'] : null,
             ]);
             $school->status = SchoolStatus::Trial;
-            $school->trial_ends_at = now()->addDays((int) config('schools.trial_days', 30));
+            $timezone = $school->timezone ?: 'Asia/Kolkata';
+            $trialDays = (int) config('schools.trial_days', 30);
+            $school->trial_ends_at = now($timezone)->addDays($trialDays)->endOfDay()->startOfSecond()->utc();
             $school->save();
 
             $membership = new Membership([

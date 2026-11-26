@@ -84,7 +84,8 @@ it('registers a school, owner, membership, Owner role, audit log, and queues ver
         ->and($school->state)->toBe(IndianState::Gujarat)
         ->and($school->city)->toBe('Ahmedabad')
         ->and($school->board)->toBe(SchoolBoard::Cbse)
-        ->and(now()->diffInDays($school->trial_ends_at))->toEqualWithDelta(30, 0.2);
+        ->and($school->trial_ends_at?->timezone('Asia/Kolkata')->format('Y-m-d H:i:s'))
+        ->toBe(now('Asia/Kolkata')->addDays(30)->format('Y-m-d 23:59:59'));
 
     $membership = Membership::where('school_id', $school->id)
         ->where('user_id', $user->id)
@@ -209,7 +210,8 @@ it('ignores mass-assignment attempts for status, trial_ends_at, and student_limi
     ]));
 
     expect($school->status)->toBe(SchoolStatus::Trial)
-        ->and(now()->diffInDays($school->trial_ends_at))->toEqualWithDelta(30, 0.2)
+        ->and($school->trial_ends_at?->timezone('Asia/Kolkata')->format('Y-m-d H:i:s'))
+        ->toBe(now('Asia/Kolkata')->addDays(30)->format('Y-m-d 23:59:59'))
         ->and($school->student_limit)->toBeNull()
         ->and($user->is_platform_admin)->toBeFalse();
 });
