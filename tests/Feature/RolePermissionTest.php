@@ -1,10 +1,16 @@
 <?php
 
+use App\Enums\SchoolPermission;
 use App\Enums\SchoolRole;
+use App\Models\AcademicYear;
+use App\Models\Grade;
 use App\Models\School;
 use App\Models\User;
+use App\Tenant\CurrentSchool;
+use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -118,4 +124,166 @@ test('deleting a user removes their role assignments in every school', function 
     $user->delete();
 
     expect(DB::table('model_has_roles')->where('model_id', $user->id)->count())->toBe(0);
+});
+
+test('permission seeder creates all setup permissions idempotently', function () {
+    $this->seed(PermissionSeeder::class);
+    $this->seed(PermissionSeeder::class);
+
+    expect(Role::count())->toBe(6)
+        ->and(Permission::count())->toBe(4)
+        ->and(Permission::pluck('name')->sort()->values()->all())->toBe([
+            'academic_years.manage',
+            'academic_years.view',
+            'grades.manage',
+            'grades.view',
+        ]);
+});
+
+test('permission seeder assigns the expected permissions to each school role', function (
+    SchoolRole $role,
+    array $allowedPermissions,
+    array $deniedPermissions,
+) {
+    $this->seed(PermissionSeeder::class);
+
+    $school = School::factory()->create();
+    $user = User::factory()->create();
+
+    setPermissionsTeamId($school->id);
+    $user->unsetRelation('roles');
+    $user->assignRole($role->value);
+    $user->unsetRelation('roles', 'permissions');
+
+    foreach ($allowedPermissions as $permission) {
+        expect($user->hasPermissionTo($permission->value))->toBeTrue();
+    }
+
+    foreach ($deniedPermissions as $permission) {
+        expect($user->hasPermissionTo($permission->value))->toBeFalse();
+    }
+})->with([
+    'Owner' => [
+        SchoolRole::Owner,
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesView,
+            SchoolPermission::GradesManage,
+        ],
+        [],
+    ],
+    'Admin' => [
+        SchoolRole::Admin,
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesView,
+            SchoolPermission::GradesManage,
+        ],
+        [],
+    ],
+    'Accountant' => [
+        SchoolRole::Accountant,
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::GradesView,
+        ],
+        [
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesManage,
+        ],
+    ],
+    'Teacher' => [
+        SchoolRole::Teacher,
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::GradesView,
+        ],
+        [
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesManage,
+        ],
+    ],
+    'Parent' => [
+        SchoolRole::Parent,
+        [],
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesView,
+            SchoolPermission::GradesManage,
+        ],
+    ],
+    'Student' => [
+        SchoolRole::Student,
+        [],
+        [
+            SchoolPermission::AcademicYearsView,
+            SchoolPermission::AcademicYearsManage,
+            SchoolPermission::GradesView,
+            SchoolPermission::GradesManage,
+        ],
+    ],
+]);
+
+test('policies enforce current school, matching team ID, permissions, and record school boundary', function () {
+    $this->seed(PermissionSeeder::class);
+
+    $schoolA = School::factory()->create();
+    $schoolB = School::factory()->create();
+    $owner = User::factory()->create();
+    $teacher = User::factory()->create();
+
+    setPermissionsTeamId($schoolA->id);
+    $owner->assignRole(SchoolRole::Owner->value);
+    $teacher->assignRole(SchoolRole::Teacher->value);
+
+    setPermissionsTeamId($schoolB->id);
+    $owner->unsetRelation('roles');
+    $owner->assignRole(SchoolRole::Parent->value);
+
+    CurrentSchool::set($schoolA);
+    $yearA = AcademicYear::factory()->for($schoolA)->create();
+    $gradeA = Grade::factory()->for($schoolA)->create();
+
+    CurrentSchool::set($schoolB);
+    $yearB = AcademicYear::factory()->for($schoolB)->create();
+    $gradeB = Grade::factory()->for($schoolB)->create();
+
+    // Fails closed without CurrentSchool or mismatched team ID
+    CurrentSchool::forget();
+    setPermissionsTeamId($schoolA->id);
+    $owner->unsetRelation('roles', 'permissions');
+    expect($owner->can('viewAny', AcademicYear::class))->toBeFalse()
+        ->and($owner->can('viewAny', Grade::class))->toBeFalse();
+
+    CurrentSchool::set($schoolA);
+    setPermissionsTeamId($schoolB->id);
+    $owner->unsetRelation('roles', 'permissions');
+    expect($owner->can('viewAny', AcademicYear::class))->toBeFalse()
+        ->and($owner->can('create', Grade::class))->toBeFalse();
+
+    // Valid School A context
+    setPermissionsTeamId($schoolA->id);
+    $owner->unsetRelation('roles', 'permissions');
+    $teacher->unsetRelation('roles', 'permissions');
+
+    expect($owner->can('viewAny', AcademicYear::class))->toBeTrue()
+        ->and($owner->can('create', AcademicYear::class))->toBeTrue()
+        ->and($owner->can('update', $yearA))->toBeTrue()
+        ->and($owner->can('makeCurrent', $yearA))->toBeTrue()
+        ->and($owner->can('update', $yearB))->toBeFalse()
+        ->and($owner->can('viewAny', Grade::class))->toBeTrue()
+        ->and($owner->can('create', Grade::class))->toBeTrue()
+        ->and($owner->can('archive', $gradeA))->toBeTrue()
+        ->and($owner->can('restore', $gradeA))->toBeTrue()
+        ->and($owner->can('delete', $gradeA))->toBeFalse()
+        ->and($owner->can('update', $gradeB))->toBeFalse()
+        ->and($teacher->can('viewAny', AcademicYear::class))->toBeTrue()
+        ->and($teacher->can('create', AcademicYear::class))->toBeFalse()
+        ->and($teacher->can('update', $yearA))->toBeFalse()
+        ->and($teacher->can('viewAny', Grade::class))->toBeTrue()
+        ->and($teacher->can('create', Grade::class))->toBeFalse()
+        ->and($teacher->can('archive', $gradeA))->toBeFalse();
 });

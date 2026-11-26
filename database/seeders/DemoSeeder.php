@@ -29,7 +29,10 @@ class DemoSeeder extends Seeder
             throw new RuntimeException('DemoSeeder can only run in local or testing environments.');
         }
 
-        $this->call(RoleSeeder::class);
+        $this->call([
+            RoleSeeder::class,
+            PermissionSeeder::class,
+        ]);
 
         $multiSchoolUser = $this->ensureUser('Test User', 'test@example.com');
         $singleSchoolUser = $this->ensureUser('Single School User', 'single@example.com');

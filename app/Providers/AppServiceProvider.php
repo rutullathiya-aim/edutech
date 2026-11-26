@@ -41,7 +41,12 @@ class AppServiceProvider extends ServiceProvider
             SetCurrentSchool::class,
         ]);
 
-        $this->app->terminating(static fn () => Once::flush());
+        $this->app->terminating(static function (): void {
+            Once::flush();
+
+            $user = auth()->user();
+            SetCurrentSchool::cleanupFromMiddleware($user instanceof User ? $user : null);
+        });
 
         View::composer(['*app.sidebar', '*app.header', 'welcome'], function (ViewContract $view): void {
             $dashboardUrl = CurrentSchool::check()
@@ -75,14 +80,15 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
+        Password::defaults(
+            fn (): ?Password => app()->isProduction()
+                ? Password::min(12)
+                    ->mixedCase()
+                    ->letters()
+                    ->numbers()
+                    ->symbols()
+                    ->uncompromised()
+                : null,
         );
     }
 }

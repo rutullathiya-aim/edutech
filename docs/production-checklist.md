@@ -44,6 +44,7 @@ This document details mandatory production security and operational requirements
 
 ## 4. Queues & Background Workers
 - [ ] **Seed Required Roles on Every Deploy**: Run `php artisan db:seed --class=RoleSeeder --force` on every deployment so the canonical `SchoolRole` entries exist in the database. Without the `Owner` role seeded, every school registration fails cleanly inside its transaction.
+- [ ] **Seed Required Permissions on Every Deploy**: Run `php artisan db:seed --class=PermissionSeeder --force` on every deployment so permissions and role-permission mappings stay in sync with deployed policies and routes.
 - [ ] **Never Run `DemoSeeder` or Plain `db:seed` in Production**: `DemoSeeder` and plain `php artisan db:seed` must never be run on production servers (`DemoSeeder` explicitly throws outside `local`/`testing`, and `DatabaseSeeder` restricts test-user creation to `local`).
 - [ ] **Publish DPDP Legal Pages Before Pilot**: Publish Terms of Service and Privacy Policy pages reviewed by a CA/lawyer, link them from the `/register-school` consent checkbox, and bump `SCHOOL_TERMS_VERSION` whenever their wording changes.
 - [ ] **Scheduled Unverified Sign-Up Cleanup**: Schedule cleanup for abandoned trial schools whose owners have not verified their email within 7 days of registration.

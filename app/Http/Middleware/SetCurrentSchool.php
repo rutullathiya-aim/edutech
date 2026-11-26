@@ -7,12 +7,15 @@ use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class SetCurrentSchool
 {
+    protected const ACTIVE_REQUEST_KEY = 'tenant_school_middleware_active';
+
     /**
      * Handle an incoming request.
      *
@@ -63,6 +66,7 @@ class SetCurrentSchool
 
         // 4. CurrentSchool::set().
         CurrentSchool::set($school);
+        Context::addHidden(self::ACTIVE_REQUEST_KEY, true);
 
         // 5. Set the permission package's current team to this school.
         setPermissionsTeamId($school->id);
@@ -80,9 +84,34 @@ class SetCurrentSchool
      */
     public function terminate(Request $request, Response $response): void
     {
+        $user = $request->user();
+        static::resetContext($user instanceof User ? $user : null);
+    }
+
+    /**
+     * Reset tenant and permission state if this request entered SetCurrentSchool middleware.
+     */
+    public static function cleanupFromMiddleware(?User $user = null): void
+    {
+        if (Context::getHidden(self::ACTIVE_REQUEST_KEY) !== true) {
+            return;
+        }
+
+        static::resetContext($user);
+    }
+
+    /**
+     * Clear the active school context and cached permission state.
+     */
+    public static function resetContext(?User $user = null): void
+    {
         CurrentSchool::forget();
+        Context::forgetHidden(self::ACTIVE_REQUEST_KEY);
         setPermissionsTeamId(null);
-        $request->user()?->unsetRelation('roles');
-        $request->user()?->unsetRelation('permissions');
+
+        if ($user instanceof User) {
+            $user->unsetRelation('roles');
+            $user->unsetRelation('permissions');
+        }
     }
 }
