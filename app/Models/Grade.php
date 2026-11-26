@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -58,6 +59,16 @@ class Grade extends Model
             ->logOnly(['name', 'short_name', 'sort_order', 'archived_at'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
+    }
+
+    /**
+     * Get all sections belonging to this grade.
+     *
+     * @return HasMany<Section, $this>
+     */
+    public function sections(): HasMany
+    {
+        return $this->hasMany(Section::class);
     }
 
     /**

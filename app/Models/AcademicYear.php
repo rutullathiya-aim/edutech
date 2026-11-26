@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use InvalidArgumentException;
 use LogicException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -111,6 +112,16 @@ class AcademicYear extends Model
             ->logOnly(['name', 'starts_on', 'ends_on', 'is_current', 'closed_at'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
+    }
+
+    /**
+     * Get all sections belonging to this academic year.
+     *
+     * @return HasMany<Section, $this>
+     */
+    public function sections(): HasMany
+    {
+        return $this->hasMany(Section::class);
     }
 
     /**
