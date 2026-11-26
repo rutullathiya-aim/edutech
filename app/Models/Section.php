@@ -66,6 +66,15 @@ class Section extends Model
                 throw new LogicException('Cannot assign an archived grade to a section.');
             }
         });
+
+        static::deleting(function (Section $section): void {
+            /** @var string|null $persistedYearId */
+            $persistedYearId = $section->getOriginal('academic_year_id') ?? $section->academic_year_id;
+
+            if ($section->resolveParentModel(AcademicYear::class, $persistedYearId)?->isClosed()) {
+                throw new LogicException('Cannot delete a section in a closed academic year.');
+            }
+        });
     }
 
     /**

@@ -24,7 +24,11 @@
             </flux:sidebar.group>
 
             @if (\App\Tenant\CurrentSchool::check())
-            @if (auth()->user()?->can('viewAny', \App\Models\AcademicYear::class) || auth()->user()?->can('viewAny', \App\Models\Grade::class))
+            @if (
+                auth()->user()?->can('viewAny', \App\Models\AcademicYear::class)
+                || auth()->user()?->can('viewAny', \App\Models\Grade::class)
+                || auth()->user()?->can('viewAny', \App\Models\Section::class)
+            )
             <flux:sidebar.group :heading="__('School setup')" class="grid" data-test="school-setup-sidebar-group">
                 @can('viewAny', \App\Models\AcademicYear::class)
                 <flux:sidebar.item
@@ -43,6 +47,16 @@
                     :current="request()->routeIs('setup.grades')"
                     wire:navigate>
                     {{ __('Grades') }}
+                </flux:sidebar.item>
+                @endcan
+
+                @can('viewAny', \App\Models\Section::class)
+                <flux:sidebar.item
+                    icon="squares-2x2"
+                    :href="route('setup.sections', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
+                    :current="request()->routeIs('setup.sections')"
+                    wire:navigate>
+                    {{ __('Sections') }}
                 </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>

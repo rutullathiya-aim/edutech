@@ -267,6 +267,11 @@ it('refuses closed academic years and archived grades in both validation and the
 
     expect(fn () => $sectionInSoonClosedYear->update(['academic_year_id' => $openYear->id]))
         ->toThrow(LogicException::class, 'Cannot modify a section belonging to a closed academic year.');
+
+    $sectionInSoonClosedYear->refresh();
+
+    expect(fn () => $sectionInSoonClosedYear->delete())
+        ->toThrow(LogicException::class, 'Cannot delete a section in a closed academic year.');
 });
 
 it('rejects duplicate section names for the same school, year, and grade while allowing them across different grades, years, or schools', function () {

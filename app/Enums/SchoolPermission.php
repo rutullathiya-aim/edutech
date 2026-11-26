@@ -8,4 +8,6 @@ enum SchoolPermission: string
     case AcademicYearsManage = 'academic_years.manage';
     case GradesView = 'grades.view';
     case GradesManage = 'grades.manage';
+    case SectionsView = 'sections.view';
+    case SectionsManage = 'sections.manage';
 }

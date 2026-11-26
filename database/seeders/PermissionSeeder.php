@@ -55,6 +55,7 @@ class PermissionSeeder extends Seeder
         $viewOnly = [
             SchoolPermission::AcademicYearsView,
             SchoolPermission::GradesView,
+            SchoolPermission::SectionsView,
         ];
 
         return [
