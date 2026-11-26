@@ -388,3 +388,85 @@ it('protects school_id and archived_at on Subject and school_id on GradeSubject 
     expect($audit)->not->toBeNull()
         ->and($audit->school_id)->toBe($school->id);
 });
+
+it('orders scholastic subjects alphabetically before co-scholastic subjects', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    Subject::factory()->for($school)->coScholastic()->create(['name' => 'Art Education']);
+    Subject::factory()->for($school)->create(['name' => 'Science', 'kind' => SubjectKind::Scholastic]);
+    Subject::factory()->for($school)->create(['name' => 'English', 'kind' => SubjectKind::Scholastic]);
+    Subject::factory()->for($school)->coScholastic()->create(['name' => 'Work Education']);
+
+    expect(Subject::ordered()->pluck('name')->all())->toBe([
+        'English',
+        'Science',
+        'Art Education',
+        'Work Education',
+    ]);
+});
+
+it('preserves grade subject IDs on repeated syncs and updates or deletes only changed rows', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    $grade = Grade::factory()->for($school)->create();
+    $english = Subject::factory()->for($school)->create(['name' => 'English']);
+    $math = Subject::factory()->for($school)->create(['name' => 'Mathematics']);
+    $sanskrit = Subject::factory()->for($school)->create(['name' => 'Sanskrit']);
+
+    $sync = app(SyncGradeSubjects::class);
+
+    $initial = $sync->handle($grade, [
+        ['subject_id' => $english->id, 'is_optional' => false, 'sort_order' => 1],
+        ['subject_id' => $math->id, 'is_optional' => false, 'sort_order' => 2],
+        ['subject_id' => $sanskrit->id, 'is_optional' => false, 'sort_order' => 3],
+    ])->keyBy('subject_id');
+
+    $englishRowId = $initial->get($english->id)?->id;
+    $mathRowId = $initial->get($math->id)?->id;
+    $sanskritRowId = $initial->get($sanskrit->id)?->id;
+
+    $auditCountAfterInitial = Activity::where('log_name', 'grade_subject')->count();
+
+    // Saving the same set twice keeps all existing IDs and adds zero audit entries
+    $second = $sync->handle($grade, [
+        ['subject_id' => $english->id, 'is_optional' => false, 'sort_order' => 1],
+        ['subject_id' => $math->id, 'is_optional' => false, 'sort_order' => 2],
+        ['subject_id' => $sanskrit->id, 'is_optional' => false, 'sort_order' => 3],
+    ])->keyBy('subject_id');
+
+    expect($second->get($english->id)?->id)->toBe($englishRowId)
+        ->and($second->get($math->id)?->id)->toBe($mathRowId)
+        ->and($second->get($sanskrit->id)?->id)->toBe($sanskritRowId)
+        ->and(Activity::where('log_name', 'grade_subject')->count())->toBe($auditCountAfterInitial);
+
+    // Changing only is_optional on Sanskrit updates that one row in place and logs one updated entry
+    $third = $sync->handle($grade, [
+        ['subject_id' => $english->id, 'is_optional' => false, 'sort_order' => 1],
+        ['subject_id' => $math->id, 'is_optional' => false, 'sort_order' => 2],
+        ['subject_id' => $sanskrit->id, 'is_optional' => true, 'sort_order' => 3],
+    ])->keyBy('subject_id');
+
+    $newAudits = Activity::where('log_name', 'grade_subject')
+        ->skip($auditCountAfterInitial)
+        ->take(10)
+        ->get();
+
+    expect($third->get($sanskrit->id)?->id)->toBe($sanskritRowId)
+        ->and($third->get($sanskrit->id)?->is_optional)->toBeTrue()
+        ->and($newAudits)->toHaveCount(1)
+        ->and($newAudits->first()?->event)->toBe('updated')
+        ->and($newAudits->first()?->subject_id)->toBe($sanskritRowId);
+
+    // Removing Mathematics deletes only that row while keeping English and Sanskrit IDs intact
+    $fourth = $sync->handle($grade, [
+        ['subject_id' => $english->id, 'is_optional' => false, 'sort_order' => 1],
+        ['subject_id' => $sanskrit->id, 'is_optional' => true, 'sort_order' => 2],
+    ])->keyBy('subject_id');
+
+    expect($fourth)->toHaveCount(2)
+        ->and($fourth->get($english->id)?->id)->toBe($englishRowId)
+        ->and($fourth->get($sanskrit->id)?->id)->toBe($sanskritRowId)
+        ->and(GradeSubject::find($mathRowId))->toBeNull();
+});

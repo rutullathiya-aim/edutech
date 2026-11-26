@@ -14,7 +14,7 @@ use LogicException;
 class SyncGradeSubjects
 {
     /**
-     * Atomically replace one grade's subject curriculum within the current school.
+     * Atomically sync one grade's subject curriculum in place to preserve existing IDs and audit history.
      *
      * @param  list<array{subject_id: string, is_optional?: bool, sort_order: int}>  $items
      * @return Collection<int, GradeSubject>
@@ -27,11 +27,16 @@ class SyncGradeSubjects
             throw new LogicException('Cannot sync subjects for a grade belonging to another school.');
         }
 
-        if ($grade->isArchived()) {
-            throw new LogicException('Cannot manage curriculum for an archived grade.');
-        }
-
         return DB::transaction(function () use ($grade, $items): Collection {
+            $lockedGrade = Grade::query()
+                ->whereKey($grade->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedGrade->isArchived()) {
+                throw new LogicException('Cannot manage curriculum for an archived grade.');
+            }
+
             $subjectIds = array_column($items, 'subject_id');
 
             if (count($subjectIds) !== count(array_unique($subjectIds))) {
@@ -60,25 +65,48 @@ class SyncGradeSubjects
                 }
             }
 
-            GradeSubject::query()
-                ->where('grade_id', $grade->id)
+            $existingBySubject = GradeSubject::query()
+                ->where('grade_id', $lockedGrade->id)
                 ->get()
-                ->each
-                ->delete();
+                ->keyBy('subject_id');
+
+            $submittedSubjectLookup = array_flip($subjectIds);
+
+            foreach ($existingBySubject as $subjectId => $existingRow) {
+                if (! isset($submittedSubjectLookup[$subjectId])) {
+                    $existingRow->delete();
+                }
+            }
 
             /** @var Collection<int, GradeSubject> $synced */
             $synced = new Collection;
 
             foreach ($items as $item) {
+                $isOptional = (bool) ($item['is_optional'] ?? false);
+                $existingRow = $existingBySubject->get($item['subject_id']);
+
+                if ($existingRow instanceof GradeSubject) {
+                    $existingRow->is_optional = $isOptional;
+                    $existingRow->sort_order = $item['sort_order'];
+
+                    if ($existingRow->isDirty()) {
+                        $existingRow->save();
+                    }
+
+                    $synced->push($existingRow);
+
+                    continue;
+                }
+
                 $synced->push(GradeSubject::create([
-                    'grade_id' => $grade->id,
+                    'grade_id' => $lockedGrade->id,
                     'subject_id' => $item['subject_id'],
-                    'is_optional' => (bool) ($item['is_optional'] ?? false),
+                    'is_optional' => $isOptional,
                     'sort_order' => $item['sort_order'],
                 ]));
             }
 
-            return $synced;
+            return $synced->sortBy('sort_order')->values();
         });
     }
 }

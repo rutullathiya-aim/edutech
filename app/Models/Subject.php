@@ -104,12 +104,15 @@ class Subject extends Model
     }
 
     /**
-     * Scope a query to order subjects alphabetically within kind.
+     * Scope a query to order scholastic subjects before co-scholastic subjects alphabetically.
      *
      * @param  Builder<Subject>  $query
      */
     public function scopeOrdered(Builder $query): void
     {
-        $query->orderBy('kind')->orderBy('name');
+        $query->orderByRaw(
+            'CASE WHEN kind = ? THEN 0 ELSE 1 END, name ASC',
+            [SubjectKind::Scholastic->value],
+        );
     }
 }
