@@ -23,6 +23,7 @@ return new class extends Migration
 
             $table->unique(['school_id', 'academic_year_id', 'grade_id', 'name'], 'sections_name_unique');
             $table->unique(['school_id', 'id'], 'sections_school_id_unique');
+            $table->unique(['school_id', 'academic_year_id', 'id'], 'sections_school_year_id_unique');
 
             $table->foreign('school_id', 'sections_school_fk')
                 ->references('id')
