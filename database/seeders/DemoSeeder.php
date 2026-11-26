@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Actions\AcademicYears\MakeAcademicYearCurrent;
+use App\Actions\Grades\CreateStandardGrades;
 use App\Enums\IndianState;
 use App\Enums\MembershipStatus;
 use App\Enums\SchoolBoard;
@@ -100,16 +101,16 @@ class DemoSeeder extends Seeder
         $this->ensureMembership($otherUser, $foreignSchool, MembershipStatus::Active, SchoolRole::Owner);
 
         foreach ([$sunrise, $stXaviers, $greenValley, $suspendedSchool, $disabledMembershipSchool, $foreignSchool] as $school) {
-            $this->ensureDemoAcademicYears($school);
+            $this->ensureDemoSchoolSetup($school);
         }
 
         setPermissionsTeamId(null);
     }
 
     /**
-     * Ensure each demo school has one past academic year (2025-26) and one current year (2026-27).
+     * Ensure each demo school has past/current academic years and standard grades.
      */
-    private function ensureDemoAcademicYears(School $school): void
+    private function ensureDemoSchoolSetup(School $school): void
     {
         CurrentSchool::set($school);
 
@@ -133,6 +134,8 @@ class DemoSeeder extends Seeder
             if (! $currentYear->is_current && ! AcademicYear::current()->exists()) {
                 app(MakeAcademicYearCurrent::class)->handle($currentYear);
             }
+
+            app(CreateStandardGrades::class)->handle();
         } finally {
             CurrentSchool::forget();
         }

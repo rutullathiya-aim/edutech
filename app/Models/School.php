@@ -120,6 +120,16 @@ class School extends Model
     }
 
     /**
+     * Get all grades belonging to the school.
+     *
+     * @return HasMany<Grade, $this>
+     */
+    public function grades(): HasMany
+    {
+        return $this->hasMany(Grade::class);
+    }
+
+    /**
      * Get all users belonging to the school (read-only: create memberships via the Membership model).
      *
      * @return BelongsToMany<User, $this>

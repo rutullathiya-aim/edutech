@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Tenant\CurrentSchool;
 use Database\Factories\AcademicYearFactory;
+use Database\Factories\GradeFactory;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Fortify\Features;
 
@@ -16,6 +17,7 @@ abstract class TestCase extends BaseTestCase
         CurrentSchool::forget();
         setPermissionsTeamId(null);
         AcademicYearFactory::resetYearSequence();
+        GradeFactory::resetSequence();
     }
 
     protected function tearDown(): void
