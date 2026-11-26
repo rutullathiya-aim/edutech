@@ -179,6 +179,68 @@ it('switches the current academic year off the previous year and onto the chosen
         ->and($audit->properties?->get('previous_academic_year_id'))->toBe($oldYear->id);
 });
 
+it('fails closed in MakeAcademicYearCurrent when no current school is set or for a different school', function () {
+    $schoolA = School::factory()->create();
+    $schoolB = School::factory()->create();
+
+    CurrentSchool::set($schoolA);
+    $yearA = AcademicYear::factory()->for($schoolA)->create();
+
+    CurrentSchool::forget();
+    expect(fn () => app(MakeAcademicYearCurrent::class)->handle($yearA))
+        ->toThrow(NoCurrentSchoolException::class);
+
+    CurrentSchool::set($schoolB);
+    expect(fn () => app(MakeAcademicYearCurrent::class)->handle($yearA))
+        ->toThrow(LogicException::class, 'Cannot mark an academic year current for a different school.');
+});
+
+it('refuses modifying name, dates, or current flag on a closed academic year', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    $closedYear = AcademicYear::factory()->for($school)->closed()->create([
+        'name' => '2024-25',
+        'starts_on' => '2024-04-01',
+        'ends_on' => '2025-03-31',
+    ]);
+
+    expect(fn () => $closedYear->update(['ends_on' => '2025-04-15']))
+        ->toThrow(LogicException::class, 'A closed academic year cannot be modified.');
+
+    $closedYear->refresh();
+    expect(fn () => $closedYear->update(['name' => '2024-99']))
+        ->toThrow(LogicException::class, 'A closed academic year cannot be modified.');
+});
+
+it('refuses deleting the current academic year or a closed academic year while allowing deleting open non-current years', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    $currentYear = AcademicYear::factory()->for($school)->current()->create();
+    $closedYear = AcademicYear::factory()->for($school)->closed()->create();
+    $openYear = AcademicYear::factory()->for($school)->create();
+
+    expect(fn () => $currentYear->delete())
+        ->toThrow(LogicException::class, 'The current academic year cannot be deleted.');
+
+    expect(fn () => $closedYear->delete())
+        ->toThrow(LogicException::class, 'A closed academic year cannot be deleted.');
+
+    $openYear->delete();
+    $this->assertModelMissing($openYear);
+});
+
+it('refuses saving an academic year when start or end dates are missing', function () {
+    $school = School::factory()->create();
+    CurrentSchool::set($school);
+
+    expect(fn () => AcademicYear::create([
+        'name' => '2027-28',
+        'starts_on' => '2027-04-01',
+    ]))->toThrow(InvalidArgumentException::class, 'Both start date and end date are required for an academic year.');
+});
+
 it('refuses marking a closed academic year as current via MakeAcademicYearCurrent', function () {
     $school = School::factory()->create();
     CurrentSchool::set($school);

@@ -14,6 +14,14 @@ class AcademicYearFactory extends Factory
     private static int $yearSequence = 2010;
 
     /**
+     * Reset the sequential factory start year for deterministic tests.
+     */
+    public static function resetYearSequence(): void
+    {
+        self::$yearSequence = 2010;
+    }
+
+    /**
      * Define the model's default state.
      *
      * @return array<string, mixed>

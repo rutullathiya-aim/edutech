@@ -10,11 +10,11 @@ use LogicException;
 class MakeAcademicYearCurrent
 {
     /**
-     * Mark the given academic year as the sole current year for its school.
+     * Mark the given academic year as the sole current year for the current school.
      */
     public function handle(AcademicYear $academicYear): AcademicYear
     {
-        if (CurrentSchool::check() && $academicYear->school_id !== CurrentSchool::idOrFail()) {
+        if ($academicYear->school_id !== CurrentSchool::idOrFail()) {
             throw new LogicException('Cannot mark an academic year current for a different school.');
         }
 
@@ -28,19 +28,22 @@ class MakeAcademicYearCurrent
             }
 
             $existingCurrent = AcademicYear::query()
-                ->where('school_id', $academicYear->school_id)
                 ->where('is_current', true)
                 ->where('id', '!=', $academicYear->id)
                 ->lockForUpdate()
                 ->first();
 
-            if ($existingCurrent instanceof AcademicYear) {
-                $existingCurrent->is_current = false;
-                $existingCurrent->save();
-            }
+            $this->withoutModelLogging($existingCurrent, function () use ($existingCurrent): void {
+                if ($existingCurrent instanceof AcademicYear) {
+                    $existingCurrent->is_current = false;
+                    $existingCurrent->save();
+                }
+            });
 
-            $academicYear->is_current = true;
-            $academicYear->save();
+            $this->withoutModelLogging($academicYear, function () use ($academicYear): void {
+                $academicYear->is_current = true;
+                $academicYear->save();
+            });
 
             activity('academic_year')
                 ->causedBy(auth()->user())
@@ -54,5 +57,23 @@ class MakeAcademicYearCurrent
 
             return $academicYear->refresh();
         });
+    }
+
+    /**
+     * Run a callback with automatic activity logging disabled on the given model.
+     */
+    private function withoutModelLogging(?AcademicYear $academicYear, callable $callback): void
+    {
+        if (! $academicYear instanceof AcademicYear) {
+            return;
+        }
+
+        $academicYear->disableLogging();
+
+        try {
+            $callback();
+        } finally {
+            $academicYear->enableLogging();
+        }
     }
 }

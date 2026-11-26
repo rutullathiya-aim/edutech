@@ -54,12 +54,34 @@ class AcademicYear extends Model
     protected static function booted(): void
     {
         static::saving(function (AcademicYear $academicYear): void {
+            if ($academicYear->getAttribute('starts_on') === null || $academicYear->getAttribute('ends_on') === null) {
+                throw new InvalidArgumentException('Both start date and end date are required for an academic year.');
+            }
+
             if ($academicYear->ends_on->lessThanOrEqualTo($academicYear->starts_on)) {
                 throw new InvalidArgumentException('The academic year end date must be after the start date.');
             }
 
             if ($academicYear->is_current && $academicYear->isClosed()) {
                 throw new LogicException('A closed academic year cannot be marked as current.');
+            }
+
+            if (
+                $academicYear->exists
+                && $academicYear->getOriginal('closed_at') !== null
+                && $academicYear->isDirty(['name', 'starts_on', 'ends_on', 'is_current'])
+            ) {
+                throw new LogicException('A closed academic year cannot be modified.');
+            }
+        });
+
+        static::deleting(function (AcademicYear $academicYear): void {
+            if ($academicYear->is_current) {
+                throw new LogicException('The current academic year cannot be deleted.');
+            }
+
+            if ($academicYear->isClosed()) {
+                throw new LogicException('A closed academic year cannot be deleted.');
             }
         });
     }
