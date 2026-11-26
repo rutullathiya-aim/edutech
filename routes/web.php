@@ -10,8 +10,10 @@ use App\Livewire\Setup\AcademicYears as SetupAcademicYears;
 use App\Livewire\Setup\Grades as SetupGrades;
 use App\Livewire\Setup\Sections as SetupSections;
 use App\Livewire\Setup\Subjects as SetupSubjects;
+use App\Livewire\Staff\Index as StaffIndex;
 use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Membership;
 use App\Models\Section;
 use App\Models\Subject;
 use Illuminate\Support\Facades\Route;
@@ -56,6 +58,10 @@ Route::prefix('{school}')
         Route::livewire('setup/subjects', SetupSubjects::class)
             ->can('viewAny', Subject::class)
             ->name('setup.subjects');
+
+        Route::livewire('staff', StaffIndex::class)
+            ->can('viewAny', Membership::class)
+            ->name('staff.index');
     });
 
 require __DIR__.'/settings.php';
