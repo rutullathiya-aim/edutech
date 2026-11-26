@@ -72,6 +72,18 @@
                 @endcan
             </flux:sidebar.group>
             @endif
+
+            @can('viewAny', \App\Models\Membership::class)
+            <flux:sidebar.group :heading="__('Administration')" class="grid" data-test="staff-sidebar-group">
+                <flux:sidebar.item
+                    icon="users"
+                    :href="route('staff.index', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
+                    :current="request()->routeIs('staff.*')"
+                    wire:navigate>
+                    {{ __('Staff') }}
+                </flux:sidebar.item>
+            </flux:sidebar.group>
+            @endcan
             @endif
         </flux:sidebar.nav>
 

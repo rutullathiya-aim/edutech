@@ -6,6 +6,7 @@ use App\Enums\SchoolRole;
 use App\Enums\SchoolStatus;
 use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Membership;
 use App\Models\School;
 use App\Models\Section;
 use App\Models\Subject;
@@ -13,6 +14,7 @@ use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -26,6 +28,7 @@ use Livewire\Component;
  * @property-read bool $canManageAnySetup
  * @property-read array{active_grades: int, current_year_sections: int, active_subjects: int} $setupStats
  * @property-read bool $everyActiveGradeHasSubject
+ * @property-read bool $hasInvitedActiveStaff
  * @property-read list<array{key: string, label: string, description: string, completed: bool, route: string, ability_model: class-string}> $checklistSteps
  * @property-read int $completedChecklistCount
  * @property-read bool $showChecklist
@@ -141,7 +144,8 @@ class Dashboard extends Component
         return $user->can('create', AcademicYear::class)
             || $user->can('create', Grade::class)
             || $user->can('create', Section::class)
-            || $user->can('create', Subject::class);
+            || $user->can('create', Subject::class)
+            || $user->can('create', Membership::class);
     }
 
     /**
@@ -195,6 +199,38 @@ class Dashboard extends Component
                 });
             })
             ->doesntExist();
+    }
+
+    /**
+     * Determine whether at least one non-Owner staff member holds an active membership in this school.
+     */
+    #[Computed]
+    public function hasInvitedActiveStaff(): bool
+    {
+        if (! $this->canManageAnySetup) {
+            return false;
+        }
+
+        $schoolId = $this->school->id;
+        $nonOwnerStaffRoles = [
+            SchoolRole::Admin->value,
+            SchoolRole::Accountant->value,
+            SchoolRole::Teacher->value,
+        ];
+
+        return Membership::query()
+            ->where('school_id', $schoolId)
+            ->active()
+            ->whereExists(static function (QueryBuilder $query) use ($schoolId, $nonOwnerStaffRoles): void {
+                $query->selectRaw('1')
+                    ->from('model_has_roles')
+                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                    ->whereColumn('model_has_roles.model_id', 'memberships.user_id')
+                    ->where('model_has_roles.model_type', User::class)
+                    ->where('model_has_roles.school_id', $schoolId)
+                    ->whereIn('roles.name', $nonOwnerStaffRoles);
+            })
+            ->exists();
     }
 
     /**
@@ -252,6 +288,14 @@ class Dashboard extends Component
                 'completed' => $this->everyActiveGradeHasSubject,
                 'route' => route('setup.subjects', ['school' => $school->id]),
                 'ability_model' => Subject::class,
+            ],
+            [
+                'key' => 'staff',
+                'label' => __('Invite your staff'),
+                'description' => __('Invite and activate at least one admin, accountant, or teacher.'),
+                'completed' => $this->hasInvitedActiveStaff,
+                'route' => route('staff.index', ['school' => $school->id]),
+                'ability_model' => Membership::class,
             ],
         ];
     }
