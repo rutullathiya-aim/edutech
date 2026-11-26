@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\SetCurrentSchool;
+use App\Livewire\Dashboard;
 use App\Livewire\Schools\Index as SchoolsIndex;
 use App\Livewire\Schools\Register as SchoolsRegister;
 use App\Livewire\Setup\AcademicYears as SetupAcademicYears;
@@ -29,7 +30,7 @@ Route::prefix('{school}')
     ->whereUlid('school')
     ->middleware(['auth', 'verified', SetCurrentSchool::class])
     ->group(function () {
-        Route::view('dashboard', 'dashboard')->name('dashboard');
+        Route::livewire('dashboard', Dashboard::class)->name('dashboard');
 
         Route::livewire('setup/academic-years', SetupAcademicYears::class)
             ->can('viewAny', AcademicYear::class)
