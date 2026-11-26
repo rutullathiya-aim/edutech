@@ -92,7 +92,7 @@
     @endif
 
     @if ($this->canViewSetupCounts)
-    <div class="grid gap-4 sm:grid-cols-3" data-test="setup-stats">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-test="setup-stats">
         @can('viewAny', \App\Models\Grade::class)
         <flux:card class="space-y-1 p-5" data-test="stat-grades">
             <flux:text class="text-sm">{{ __('Active grades') }}</flux:text>
@@ -116,6 +116,15 @@
             <flux:text class="text-sm">{{ __('Active subjects') }}</flux:text>
             <div class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
                 {{ $this->setupStats['active_subjects'] }}
+            </div>
+        </flux:card>
+        @endcan
+
+        @can('viewAny', \App\Models\Student::class)
+        <flux:card class="space-y-1 p-5" data-test="stat-students">
+            <flux:text class="text-sm">{{ __('Active students') }}</flux:text>
+            <div class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                {{ $this->setupStats['current_year_students'] }}
             </div>
         </flux:card>
         @endcan

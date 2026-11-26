@@ -5,10 +5,12 @@ namespace App\Livewire;
 use App\Enums\SchoolRole;
 use App\Enums\SchoolStatus;
 use App\Models\AcademicYear;
+use App\Models\Enrollment;
 use App\Models\Grade;
 use App\Models\Membership;
 use App\Models\School;
 use App\Models\Section;
+use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
@@ -25,7 +27,7 @@ use Livewire\Component;
  * @property-read bool $canSeeTrialBanner
  * @property-read bool $canViewSetupCounts
  * @property-read bool $canManageAnySetup
- * @property-read array{active_grades: int, current_year_sections: int, active_subjects: int} $setupStats
+ * @property-read array{active_grades: int, current_year_sections: int, active_subjects: int, current_year_students: int} $setupStats
  * @property-read bool $everyActiveGradeHasSubject
  * @property-read bool $hasInvitedActiveStaff
  * @property-read list<array{key: string, label: string, description: string, completed: bool, route: string, ability_model: class-string}> $checklistSteps
@@ -125,7 +127,8 @@ class Dashboard extends Component
 
         return $user->can('viewAny', Grade::class)
             || $user->can('viewAny', Section::class)
-            || $user->can('viewAny', Subject::class);
+            || $user->can('viewAny', Subject::class)
+            || $user->can('viewAny', Student::class);
     }
 
     /**
@@ -144,13 +147,14 @@ class Dashboard extends Component
             || $user->can('create', Grade::class)
             || $user->can('create', Section::class)
             || $user->can('create', Subject::class)
-            || $user->can('create', Membership::class);
+            || $user->can('create', Membership::class)
+            || $user->can('create', Student::class);
     }
 
     /**
      * Load the school's setup summary counts in O(1) scoped queries.
      *
-     * @return array{active_grades: int, current_year_sections: int, active_subjects: int}
+     * @return array{active_grades: int, current_year_sections: int, active_subjects: int, current_year_students: int}
      */
     #[Computed]
     public function setupStats(): array
@@ -160,6 +164,7 @@ class Dashboard extends Component
                 'active_grades' => 0,
                 'current_year_sections' => 0,
                 'active_subjects' => 0,
+                'current_year_students' => 0,
             ];
         }
 
@@ -171,6 +176,9 @@ class Dashboard extends Component
                 ? Section::query()->where('academic_year_id', $currentAcademicYear->id)->count()
                 : 0,
             'active_subjects' => Subject::query()->active()->count(),
+            'current_year_students' => $currentAcademicYear !== null
+                ? Enrollment::query()->where('academic_year_id', $currentAcademicYear->id)->active()->count()
+                : 0,
         ];
     }
 
@@ -286,6 +294,14 @@ class Dashboard extends Component
                 'completed' => $this->hasInvitedActiveStaff,
                 'route' => route('staff.index', ['school' => $school->id]),
                 'ability_model' => Membership::class,
+            ],
+            [
+                'key' => 'students',
+                'label' => __('Add your students'),
+                'description' => __('Admit students and place them into sections for the current year.'),
+                'completed' => $stats['current_year_students'] > 0,
+                'route' => route('students.index', ['school' => $school->id]),
+                'ability_model' => Student::class,
             ],
         ];
     }

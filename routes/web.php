@@ -11,10 +11,15 @@ use App\Livewire\Setup\Grades as SetupGrades;
 use App\Livewire\Setup\Sections as SetupSections;
 use App\Livewire\Setup\Subjects as SetupSubjects;
 use App\Livewire\Staff\Index as StaffIndex;
+use App\Livewire\Students\Create as StudentsCreate;
+use App\Livewire\Students\Edit as StudentsEdit;
+use App\Livewire\Students\Index as StudentsIndex;
+use App\Livewire\Students\Show as StudentsShow;
 use App\Models\AcademicYear;
 use App\Models\Grade;
 use App\Models\Membership;
 use App\Models\Section;
+use App\Models\Student;
 use App\Models\Subject;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +67,24 @@ Route::prefix('{school}')
         Route::livewire('staff', StaffIndex::class)
             ->can('viewAny', Membership::class)
             ->name('staff.index');
+
+        Route::livewire('students', StudentsIndex::class)
+            ->can('viewAny', Student::class)
+            ->name('students.index');
+
+        Route::livewire('students/create', StudentsCreate::class)
+            ->can('create', Student::class)
+            ->name('students.create');
+
+        Route::livewire('students/{student}', StudentsShow::class)
+            ->whereUlid('student')
+            ->can('view', 'student')
+            ->name('students.show');
+
+        Route::livewire('students/{student}/edit', StudentsEdit::class)
+            ->whereUlid('student')
+            ->can('update', 'student')
+            ->name('students.edit');
     });
 
 require __DIR__.'/settings.php';
