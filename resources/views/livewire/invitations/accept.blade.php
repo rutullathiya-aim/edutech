@@ -117,7 +117,7 @@
         <div class="flex flex-col gap-6" data-test="accept-wrong-user">
             <x-auth-header
                 :title="__('Wrong account signed in')"
-                :description="__('This invitation was sent to :email. Log out and sign in with that account.', ['email' => $this->invitation->maskedEmail()])"
+                :description="__('This invitation was sent to :email. Log out, sign in with that account, then open the invitation link again.', ['email' => $this->invitation->maskedEmail()])"
             />
 
             @error('invitation')

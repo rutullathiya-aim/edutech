@@ -65,7 +65,7 @@ class AcceptInvitation
 
                 if (Str::lower((string) $user->email) !== $normalizedInvitedEmail) {
                     throw ValidationException::withMessages([
-                        'invitation' => __('This invitation was sent to :email. Log out and sign in with that account.', [
+                        'invitation' => __('This invitation was sent to :email. Log out, sign in with that account, then open the invitation link again.', [
                             'email' => $lockedInvitation->maskedEmail(),
                         ]),
                     ]);

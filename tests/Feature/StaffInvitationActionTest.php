@@ -337,10 +337,15 @@ it('enforces the 50/day school limit, resend cooldown, max 5 sends, token rotati
 
         // Admin cannot resend or revoke an Admin invite or another school's invite.
         $admin = setupStaffInviteActor($school, SchoolRole::Admin);
+        expect(fn () => $resendAction->handle($admin, $resent))
+            ->toThrow(AuthorizationException::class);
         expect(fn () => $revokeAction->handle($admin, $resent))
             ->toThrow(AuthorizationException::class);
-        expect(fn () => $revokeAction->handle($owner, $otherInvite))
+        expect(fn () => $resendAction->handle($admin, $otherInvite))
             ->toThrow(ModelNotFoundException::class);
+        expect(fn () => $revokeAction->handle($admin, $otherInvite))
+            ->toThrow(ModelNotFoundException::class);
+        expect($otherInvite->fresh()->revoked_at)->toBeNull();
 
         // Owner revokes successfully and logs audit entry without any token.
         $revoked = $revokeAction->handle($owner, $resent);

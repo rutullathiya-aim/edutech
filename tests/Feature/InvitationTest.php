@@ -6,6 +6,7 @@ use App\Models\Invitation;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Database\Eloquent\MassAssignmentException;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -102,6 +103,7 @@ test('an invitation created without expires_at gets an expiry about 7 days from 
     $school = School::factory()->create();
 
     $invitation = new Invitation([
+        'name' => 'Default Expiry Teacher',
         'email' => 'default_expiry@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -119,6 +121,7 @@ test('the raw token is never stored in plain text and token_hash is hidden', fun
 
     [$invitation, $rawToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Token Test Teacher',
         'email' => 'tokens@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -139,6 +142,7 @@ test('createWithToken and findPendingByToken helpers work as expected', function
 
     [$invitation, $rawToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Helper Teacher',
         'email' => 'helpers@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -187,12 +191,14 @@ test('an expired accepted or revoked invitation is not considered pending and ca
 
     [$pending, $pendingToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Pending User',
         'email' => 'pending@school.org',
         'role' => SchoolRole::Teacher,
     ]);
 
     [$expired, $expiredToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Expired User',
         'email' => 'expired@school.org',
         'role' => SchoolRole::Teacher,
         'expires_at' => now()->subDay(),
@@ -200,6 +206,7 @@ test('an expired accepted or revoked invitation is not considered pending and ca
 
     [$revoked, $revokedToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Revoked User',
         'email' => 'revoked@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -207,6 +214,7 @@ test('an expired accepted or revoked invitation is not considered pending and ca
 
     [$accepted, $acceptedToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Accepted User',
         'email' => 'accepted@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -395,4 +403,14 @@ test('open_flag enforces at most one open invitation per email per school while 
 
 test('activitylog globally excludes token_hash', function () {
     expect(config('activitylog.default_except_attributes'))->toContain('token_hash');
+});
+
+test('database refuses creating an invitation without a name', function () {
+    $school = School::factory()->create();
+
+    expect(fn () => Invitation::createWithToken([
+        'school_id' => $school->id,
+        'email' => 'nameless@school.org',
+        'role' => SchoolRole::Teacher,
+    ]))->toThrow(QueryException::class);
 });

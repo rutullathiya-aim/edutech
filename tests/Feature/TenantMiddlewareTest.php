@@ -29,6 +29,7 @@ test('creating a school-scoped model inside a tenant context auto-fills school_i
 
     try {
         [$invitation, $token] = Invitation::createWithToken([
+            'name' => 'Autofill Staff',
             'email' => 'autofill@school.org',
             'role' => SchoolRole::Teacher,
         ]);
@@ -48,6 +49,7 @@ test('cross-school write is refused when creating for a different school than cu
     try {
         expect(fn () => Invitation::createWithToken([
             'school_id' => $schoolB->id,
+            'name' => 'Cross Staff',
             'email' => 'cross@school.org',
             'role' => SchoolRole::Teacher,
         ]))->toThrow(LogicException::class, 'Cross-school write refused');
@@ -60,6 +62,7 @@ test('creating a school-scoped model outside tenant context without explicit sch
     CurrentSchool::forget();
 
     expect(fn () => Invitation::createWithToken([
+        'name' => 'No Tenant Staff',
         'email' => 'notenant@school.org',
         'role' => SchoolRole::Teacher,
     ]))->toThrow(LogicException::class, 'A school_id must be provided when creating a school-scoped model without an active tenant context.');
@@ -71,6 +74,7 @@ test('token lookup still works with no current school', function () {
     $school = School::factory()->create();
     [$invitation, $rawToken] = Invitation::createWithToken([
         'school_id' => $school->id,
+        'name' => 'Token Holder',
         'email' => 'tokenholder@school.org',
         'role' => SchoolRole::Teacher,
     ]);
@@ -247,12 +251,14 @@ test('route model binding on school-scoped records loads own school record with 
 
     [$invitationA] = Invitation::createWithToken([
         'school_id' => $schoolA->id,
+        'name' => 'Invite A',
         'email' => 'invite_a@school.org',
         'role' => SchoolRole::Teacher,
     ]);
 
     [$invitationB] = Invitation::createWithToken([
         'school_id' => $schoolB->id,
+        'name' => 'Invite B',
         'email' => 'invite_b@school.org',
         'role' => SchoolRole::Teacher,
     ]);

@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('invitations', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('school_id')->constrained('schools')->restrictOnDelete();
-            $table->string('name', 100)->default('');
+            $table->string('name', 100);
             $table->string('email')->nullable();
             $table->string('mobile', 20)->nullable();
             $table->string('role');

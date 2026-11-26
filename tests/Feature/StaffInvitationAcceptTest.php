@@ -227,7 +227,7 @@ it('handles Case D: refuses acceptance when logged in with a different email and
     $this->actingAs($wrongUser)
         ->get(route('invitations.accept'))
         ->assertOk()
-        ->assertSee('This invitation was sent to ra***@gmail.com. Log out and sign in with that account.')
+        ->assertSee('This invitation was sent to ra***@gmail.com. Log out, sign in with that account, then open the invitation link again.')
         ->assertSee('Log out')
         ->assertDontSee('data-test="accept-invitation-button"', false)
         ->assertDontSee('data-test="accept-create-account-form"', false);
