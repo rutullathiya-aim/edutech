@@ -291,9 +291,9 @@ test('root routes login, settings/profile, and dashboard resolution are not caug
     // Authenticated profile page
     $this->actingAs($user)->get('/settings/profile')->assertOk();
 
-    // Root /dashboard redirects to tenant dashboard
+    // Root /dashboard redirects to school picker
     $this->actingAs($user)->get('/dashboard')
-        ->assertRedirect("/{$school->id}/dashboard");
+        ->assertRedirect(route('schools.index'));
 });
 
 test('roles follow the URL across multiple schools', function () {

@@ -6,17 +6,18 @@ use App\Casts\NormalizedEmail;
 use App\Casts\NormalizedMobile;
 use App\Enums\MembershipStatus;
 use App\Notifications\ResetPasswordNotification;
+use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
@@ -27,17 +28,17 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $id
  * @property string $name
  * @property string|null $email
- * @property Carbon|null $email_verified_at
+ * @property CarbonInterface|null $email_verified_at
  * @property string|null $mobile
- * @property Carbon|null $mobile_verified_at
+ * @property CarbonInterface|null $mobile_verified_at
  * @property string|null $password
  * @property bool $is_platform_admin
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
- * @property Carbon|null $two_factor_confirmed_at
+ * @property CarbonInterface|null $two_factor_confirmed_at
  * @property string|null $remember_token
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonInterface|null $created_at
+ * @property CarbonInterface|null $updated_at
  */
 #[Fillable([
     'name',
@@ -177,11 +178,13 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
-     * Get the user's default active school.
+     * Get the user's active schools ordered by name, memoized for the current request.
+     *
+     * @return Collection<int, School>
      */
-    public function defaultSchool(): ?School
+    public function cachedActiveSchools(): Collection
     {
-        return once(fn () => $this->activeSchools()->first());
+        return once(fn (): Collection => $this->activeSchools()->orderBy('schools.name')->get());
     }
 
     /**

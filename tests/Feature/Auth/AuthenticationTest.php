@@ -29,7 +29,7 @@ class AuthenticationTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/dashboard');
+            ->assertRedirect('/schools');
 
         $this->assertAuthenticated();
     }

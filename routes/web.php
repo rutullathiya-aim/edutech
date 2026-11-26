@@ -1,19 +1,16 @@
 <?php
 
 use App\Http\Middleware\SetCurrentSchool;
+use App\Livewire\Schools\Index as SchoolsIndex;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
-Route::get('dashboard', function () {
-    $school = auth()->user()?->activeSchools()->first();
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('dashboard', fn () => to_route('schools.index'));
 
-    if ($school) {
-        return redirect()->route('dashboard', ['school' => $school->id]);
-    }
-
-    return redirect()->route('home');
-})->middleware(['auth', 'verified']);
+    Route::livewire('schools', SchoolsIndex::class)->name('schools.index');
+});
 
 Route::prefix('{school}')
     ->whereUlid('school')

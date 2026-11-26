@@ -10,6 +10,10 @@
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
 
+            @if ($switchableSchools->isNotEmpty())
+                <x-school-switcher :schools="$switchableSchools" />
+            @endif
+
             <flux:sidebar.nav>
                 <flux:sidebar.group :heading="__('Platform')" class="grid">
                     <flux:sidebar.item icon="home" :href="$dashboardUrl" :current="request()->routeIs('dashboard')" wire:navigate>

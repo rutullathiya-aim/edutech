@@ -6,6 +6,7 @@ use App\Casts\NormalizedEmail;
 use App\Enums\IndianState;
 use App\Enums\SchoolBoard;
 use App\Enums\SchoolStatus;
+use Carbon\CarbonInterface;
 use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,7 +16,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 /**
  * @property string $id
@@ -34,12 +34,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $logo_path
  * @property string $timezone
  * @property string $locale
- * @property Carbon|null $trial_ends_at
+ * @property CarbonInterface|null $trial_ends_at
  * @property int|null $student_limit
  * @property array<string, mixed>|null $settings
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
- * @property Carbon|null $deleted_at
+ * @property CarbonInterface|null $created_at
+ * @property CarbonInterface|null $updated_at
+ * @property CarbonInterface|null $deleted_at
  */
 #[Fillable([
     'name',

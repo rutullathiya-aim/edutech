@@ -51,6 +51,10 @@
                 <flux:sidebar.collapse class="in-data-flux-sidebar-on-desktop:not-in-data-flux-sidebar-collapsed-desktop:-mr-2" />
             </flux:sidebar.header>
 
+            @if ($switchableSchools->isNotEmpty())
+                <x-school-switcher :schools="$switchableSchools" />
+            @endif
+
             <flux:sidebar.nav>
                 <flux:sidebar.group :heading="__('Platform')">
                     <flux:sidebar.item icon="layout-grid" :href="$dashboardUrl" :current="request()->routeIs('dashboard')" wire:navigate>
