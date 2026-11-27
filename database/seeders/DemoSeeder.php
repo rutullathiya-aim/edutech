@@ -55,7 +55,7 @@ class DemoSeeder extends Seeder
         ['first' => 'Sana', 'surname' => 'Shaikh', 'father_first' => 'Tariq', 'mother_first' => 'Shabnam', 'gender' => Gender::Female, 'city' => 'Surat', 'state' => IndianState::Gujarat, 'tongue' => 'Gujarati', 'religion' => 'Muslim', 'category' => SocialCategory::Obc],
         ['first' => 'Meera', 'surname' => 'Nair', 'father_first' => 'Suresh', 'mother_first' => 'Geetha', 'gender' => Gender::Female, 'city' => 'Thiruvananthapuram', 'state' => IndianState::Kerala, 'tongue' => 'Malayalam', 'religion' => 'Hindu', 'category' => SocialCategory::General],
         ['first' => 'Devansh', 'surname' => 'Gupta', 'father_first' => 'Pankaj', 'mother_first' => 'Ritu', 'gender' => Gender::Male, 'city' => 'Delhi', 'state' => IndianState::Delhi, 'tongue' => 'Hindi', 'religion' => 'Hindu', 'category' => SocialCategory::General],
-        ['first' => 'Rhea', 'surname' => "D'Souza", 'father_first' => 'Peter', 'mother_first' => 'claire', 'gender' => Gender::Female, 'city' => 'Mumbai', 'state' => IndianState::Maharashtra, 'tongue' => 'English', 'religion' => 'Christian', 'category' => SocialCategory::General],
+        ['first' => 'Rhea', 'surname' => "D'Souza", 'father_first' => 'Peter', 'mother_first' => 'Claire', 'gender' => Gender::Female, 'city' => 'Mumbai', 'state' => IndianState::Maharashtra, 'tongue' => 'English', 'religion' => 'Christian', 'category' => SocialCategory::General],
         ['first' => 'Karthik', 'surname' => 'Pillai', 'father_first' => 'Raghavan', 'mother_first' => 'Usha', 'gender' => Gender::Male, 'city' => 'Madurai', 'state' => IndianState::TamilNadu, 'tongue' => 'Tamil', 'religion' => 'Hindu', 'category' => SocialCategory::Sc],
         ['first' => 'Nisha', 'surname' => 'Rao', 'father_first' => 'Venkat', 'mother_first' => 'Sarita', 'gender' => Gender::Female, 'city' => 'Bengaluru', 'state' => IndianState::Karnataka, 'tongue' => 'Kannada', 'religion' => 'Hindu', 'category' => SocialCategory::General],
         ['first' => 'Kabir', 'surname' => 'Mehta', 'father_first' => 'Sandeep', 'mother_first' => 'Pooja', 'gender' => Gender::Male, 'city' => 'Vadodara', 'state' => IndianState::Gujarat, 'tongue' => 'Gujarati', 'religion' => 'Jain', 'category' => SocialCategory::General],
@@ -248,6 +248,10 @@ class DemoSeeder extends Seeder
                 ->ordered()
                 ->get();
 
+            if ($grades->count() !== count($gradeNames)) {
+                throw new RuntimeException('Expected Class 1 through Class 10 grades to exist before seeding demo students.');
+            }
+
             /** @var list<array{grade: Grade, class_num: int, section: Section}> $sectionSlots */
             $sectionSlots = [];
 
@@ -308,7 +312,7 @@ class DemoSeeder extends Seeder
                         ? $this->alternateParentFirstName(false, $number)
                         : $family['mother_first'];
                     $fatherName = "{$fatherFirst} {$family['surname']}";
-                    $motherName = ucfirst($motherFirst)." {$family['surname']}";
+                    $motherName = "{$motherFirst} {$family['surname']}";
 
                     $mobilePrefix = $familyMobilePrefixes[$sourceFamilyIndex % count($familyMobilePrefixes)];
                     $fatherMobile = '+91'.$mobilePrefix.sprintf('00000%04d', 100 + $sourceFamilyIndex);
@@ -322,6 +326,10 @@ class DemoSeeder extends Seeder
                         $birthDay = (($number % 25) + 1);
                         $dob = sprintf('%04d-%02d-%02d', $birthYear, $birthMonth, $birthDay);
 
+                        $admissionYear = 2026 - ($slot['class_num'] - 1);
+                        $admissionDate = sprintf('%04d-04-%02d', $admissionYear, ($number % 15) + 1);
+                        $enrolledOn = $year->resolveEnrollmentDate($admissionDate)->toDateString();
+
                         $includeSensitive = $studentIndex % 2 === 0;
                         $rollNumber = in_array($studentIndex, self::UNASSIGNED_ROLL_INDICES, true)
                             ? null
@@ -329,7 +337,7 @@ class DemoSeeder extends Seeder
 
                         $studentData = [
                             'admission_no' => $admissionNo,
-                            'admission_date' => sprintf('2026-04-%02d', ($number % 15) + 1),
+                            'admission_date' => $admissionDate,
                             'name' => "{$firstName} {$family['surname']}",
                             'date_of_birth' => $dob,
                             'gender' => $gender->value,
@@ -378,7 +386,7 @@ class DemoSeeder extends Seeder
                                 'grade_id' => $slot['grade']->id,
                                 'section_id' => $slot['section']->id,
                                 'roll_number' => $rollNumber,
-                                'enrolled_on' => $studentData['admission_date'],
+                                'enrolled_on' => $enrolledOn,
                             ],
                             consentConfirmed: true,
                         );
@@ -409,12 +417,13 @@ class DemoSeeder extends Seeder
                             $admittedStudent->status = StudentStatus::Left;
                             $admittedStudent->save();
 
-                            $admittedStudent->enrollments()
+                            $enrollment = $admittedStudent->enrollments()
                                 ->where('academic_year_id', $year->id)
-                                ->update([
-                                    'status' => EnrollmentStatus::Left->value,
-                                    'left_on' => '2026-09-15',
-                                ]);
+                                ->firstOrFail();
+                            $enrollment->update([
+                                'status' => EnrollmentStatus::Left,
+                                'left_on' => '2026-09-15',
+                            ]);
                         }
                     }
 

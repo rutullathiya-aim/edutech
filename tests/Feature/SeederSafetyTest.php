@@ -81,6 +81,12 @@ it('seeds 60 realistic idempotent demo students into Sunrise Public School witho
     expect($sectionCounts->min())->toBeGreaterThanOrEqual(2)
         ->and($sectionCounts->max())->toBeLessThanOrEqual(4);
 
+    // Senior students carry realistic earlier admission years while 2026-27 enrollments clamp to starts_on.
+    $class10Student = Student::withoutGlobalScopes()->where('admission_no', 'SPS-2026-060')->firstOrFail();
+    $class10Enrollment = Enrollment::withoutGlobalScopes()->where('student_id', $class10Student->id)->firstOrFail();
+    expect($class10Student->admission_date->year)->toBe(2017)
+        ->and($class10Enrollment->enrolled_on->toDateString())->toBe('2026-04-01');
+
     // Re-running DemoSeeder must not duplicate students, guardians, sections, or enrollments.
     $this->artisan('db:seed', [
         '--class' => DemoSeeder::class,
