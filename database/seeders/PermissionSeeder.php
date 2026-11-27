@@ -64,7 +64,11 @@ class PermissionSeeder extends Seeder
             SchoolRole::Owner->value => $all,
             SchoolRole::Admin->value => $all,
             SchoolRole::Accountant->value => $viewOnly,
-            SchoolRole::Teacher->value => $viewOnly,
+            SchoolRole::Teacher->value => [
+                ...$viewOnly,
+                SchoolPermission::AttendanceView,
+                SchoolPermission::AttendanceMark,
+            ],
             SchoolRole::Parent->value => [],
             SchoolRole::Student->value => [],
         ];

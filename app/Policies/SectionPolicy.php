@@ -44,6 +44,16 @@ class SectionPolicy
     }
 
     /**
+     * Determine whether the user can assign or unassign class teachers in the current school.
+     */
+    public function assignClassTeacher(User $user, ?Section $section = null): bool
+    {
+        return $section instanceof Section
+            ? $this->canForSchoolRecord($user, SchoolPermission::AttendanceManage, $section->school_id)
+            : $this->canForCurrentSchool($user, SchoolPermission::AttendanceManage);
+    }
+
+    /**
      * Determine whether the user can delete sections in the current school or a specific section.
      */
     public function delete(User $user, ?Section $section = null): bool

@@ -19,11 +19,13 @@ return new class extends Migration
             $table->string('name', 10);
             $table->unsignedSmallInteger('capacity')->nullable();
             $table->string('room', 30)->nullable();
+            $table->ulid('class_teacher_user_id')->nullable();
             $table->timestamps();
 
             $table->unique(['school_id', 'academic_year_id', 'grade_id', 'name'], 'sections_name_unique');
             $table->unique(['school_id', 'id'], 'sections_school_id_unique');
             $table->unique(['school_id', 'academic_year_id', 'id'], 'sections_school_year_id_unique');
+            $table->index(['school_id', 'class_teacher_user_id'], 'sections_school_teacher_index');
 
             $table->foreign('school_id', 'sections_school_fk')
                 ->references('id')
@@ -38,6 +40,11 @@ return new class extends Migration
             $table->foreign(['school_id', 'grade_id'], 'sections_grade_fk')
                 ->references(['school_id', 'id'])
                 ->on('grades')
+                ->restrictOnDelete();
+
+            $table->foreign(['school_id', 'class_teacher_user_id'], 'sections_class_teacher_fk')
+                ->references(['school_id', 'user_id'])
+                ->on('memberships')
                 ->restrictOnDelete();
         });
     }

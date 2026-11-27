@@ -135,10 +135,13 @@ test('permission seeder creates all setup permissions idempotently', function ()
     $this->seed(PermissionSeeder::class);
 
     expect(Role::count())->toBe(6)
-        ->and(Permission::count())->toBe(14)
+        ->and(Permission::count())->toBe(17)
         ->and(Permission::pluck('name')->sort()->values()->all())->toBe([
             'academic_years.manage',
             'academic_years.view',
+            'attendance.manage',
+            'attendance.mark',
+            'attendance.view',
             'grades.manage',
             'grades.view',
             'sections.manage',
@@ -194,6 +197,9 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
+            SchoolPermission::AttendanceManage,
         ],
         [],
     ],
@@ -214,6 +220,9 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
+            SchoolPermission::AttendanceManage,
         ],
         [],
     ],
@@ -236,6 +245,9 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
+            SchoolPermission::AttendanceManage,
         ],
     ],
     'Teacher' => [
@@ -246,6 +258,8 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::SectionsView,
             SchoolPermission::SubjectsView,
             SchoolPermission::StudentsView,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
         ],
         [
             SchoolPermission::AcademicYearsManage,
@@ -257,6 +271,7 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceManage,
         ],
     ],
     'Parent' => [
@@ -277,6 +292,9 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
+            SchoolPermission::AttendanceManage,
         ],
     ],
     'Student' => [
@@ -297,6 +315,9 @@ test('permission seeder assigns the expected permissions to each school role', f
             SchoolPermission::StudentsManage,
             SchoolPermission::StudentsViewSensitive,
             SchoolPermission::StudentsImport,
+            SchoolPermission::AttendanceView,
+            SchoolPermission::AttendanceMark,
+            SchoolPermission::AttendanceManage,
         ],
     ],
 ]);

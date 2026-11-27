@@ -2,10 +2,15 @@
 
 namespace App\Livewire\Setup;
 
+use App\Actions\Attendance\AssignClassTeacher;
 use App\Concerns\SectionValidationRules;
+use App\Enums\SchoolRole;
 use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Membership;
 use App\Models\Section;
+use App\Models\User;
+use App\Tenant\CurrentSchool;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,6 +19,16 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
+/**
+ * @property-read Collection<int, AcademicYear> $academicYears
+ * @property-read AcademicYear|null $selectedAcademicYear
+ * @property-read bool $isSelectedYearClosed
+ * @property-read Collection<int, Grade> $activeGrades
+ * @property-read Collection<int, Grade> $gradeGroups
+ * @property-read bool $canManage
+ * @property-read bool $canAssignClassTeacher
+ * @property-read Collection<int, Membership> $activeClassTeacherCandidates
+ */
 #[Title('Sections')]
 class Sections extends Component
 {
@@ -120,6 +135,7 @@ class Sections extends Component
             ->whereHas('sections', fn ($query) => $query->where('academic_year_id', $selectedYear->id))
             ->with(['sections' => fn ($query) => $query
                 ->where('academic_year_id', $selectedYear->id)
+                ->with('classTeacher:id,name')
                 ->orderBy('name')])
             ->get();
     }
@@ -131,6 +147,80 @@ class Sections extends Component
     public function canManage(): bool
     {
         return auth()->user()?->can('create', Section::class) ?? false;
+    }
+
+    /**
+     * Determine whether the current user can assign or unassign class teachers.
+     */
+    #[Computed]
+    public function canAssignClassTeacher(): bool
+    {
+        return auth()->user()?->can('assignClassTeacher', Section::class) ?? false;
+    }
+
+    /**
+     * Load active staff members eligible to serve as class teachers in the current school.
+     *
+     * @return Collection<int, Membership>
+     */
+    #[Computed]
+    public function activeClassTeacherCandidates(): Collection
+    {
+        $schoolId = CurrentSchool::idOrFail();
+
+        return Membership::query()
+            ->where('school_id', $schoolId)
+            ->active()
+            ->withSchoolRole(SchoolRole::staffCases(), $schoolId)
+            ->with(['user:id,name', 'user.roles'])
+            ->get()
+            ->sortBy(static function (Membership $membership): string {
+                $role = $membership->staffRole();
+                $priority = $role === SchoolRole::Teacher ? '0' : '1';
+                $name = strtolower($membership->user->name);
+
+                return "{$priority}|{$name}";
+            })
+            ->values();
+    }
+
+    /**
+     * Determine whether a section's currently assigned class teacher no longer holds an active staff membership.
+     */
+    public function isAssignedTeacherDisabled(Section $section): bool
+    {
+        if ($section->class_teacher_user_id === null) {
+            return false;
+        }
+
+        return ! $this->activeClassTeacherCandidates->contains('user_id', $section->class_teacher_user_id);
+    }
+
+    /**
+     * Assign or unassign a class teacher for the given section using AssignClassTeacher.
+     */
+    public function assignClassTeacher(string $sectionId, string $teacherUserId, AssignClassTeacher $assignClassTeacher): void
+    {
+        $section = Section::findOrFail($sectionId);
+        $this->authorize('assignClassTeacher', $section);
+
+        $actor = auth()->user();
+
+        if (! $actor instanceof User) {
+            abort(403);
+        }
+
+        $trimmedTeacherId = trim($teacherUserId);
+        $teacher = $trimmedTeacherId !== '' ? User::query()->findOrFail($trimmedTeacherId) : null;
+
+        $assignClassTeacher->handle($actor, $section, $teacher);
+
+        unset($this->gradeGroups, $this->activeClassTeacherCandidates);
+
+        Flux::toast(
+            variant: 'success',
+            text: $teacher !== null ? __('Class teacher assigned.') : __('Class teacher unassigned.'),
+        );
     }
 
     /**

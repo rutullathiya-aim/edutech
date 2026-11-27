@@ -29,6 +29,7 @@ use Livewire\Component;
  * @property-read bool $canManageAnySetup
  * @property-read array{active_grades: int, current_year_sections: int, active_subjects: int, current_year_students: int} $setupStats
  * @property-read bool $everyActiveGradeHasSubject
+ * @property-read bool $everyCurrentYearSectionHasClassTeacher
  * @property-read bool $hasInvitedActiveStaff
  * @property-read list<array{key: string, label: string, description: string, completed: bool, route: string, ability_model: class-string}> $checklistSteps
  * @property-read int $completedChecklistCount
@@ -209,6 +210,29 @@ class Dashboard extends Component
     }
 
     /**
+     * Determine whether the current academic year has sections and every one has an assigned class teacher.
+     */
+    #[Computed]
+    public function everyCurrentYearSectionHasClassTeacher(): bool
+    {
+        if (! $this->canManageAnySetup) {
+            return false;
+        }
+
+        $currentAcademicYear = $this->currentAcademicYear;
+        $stats = $this->setupStats;
+
+        if ($currentAcademicYear === null || $stats['current_year_sections'] === 0) {
+            return false;
+        }
+
+        return Section::query()
+            ->where('academic_year_id', $currentAcademicYear->id)
+            ->whereNull('class_teacher_user_id')
+            ->doesntExist();
+    }
+
+    /**
      * Determine whether at least one non-Owner staff member holds an active membership in this school.
      */
     #[Computed]
@@ -302,6 +326,14 @@ class Dashboard extends Component
                 'completed' => $stats['current_year_students'] > 0,
                 'route' => route('students.index', ['school' => $school->id]),
                 'ability_model' => Student::class,
+            ],
+            [
+                'key' => 'class-teachers',
+                'label' => __('Assign class teachers'),
+                'description' => __('Assign a class teacher to every section in the current academic year.'),
+                'completed' => $this->everyCurrentYearSectionHasClassTeacher,
+                'route' => route('setup.sections', ['school' => $school->id]),
+                'ability_model' => Section::class,
             ],
         ];
     }

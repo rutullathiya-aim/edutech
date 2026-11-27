@@ -138,16 +138,16 @@ it('shows the trial banner only to Owner and Admin on trial schools', function (
         ->assertDontSee('Your trial ends in');
 });
 
-it('tracks each setup checklist step accurately from 0 of 7 until completion hides it', function () {
+it('tracks each setup checklist step accurately from 0 of 8 until completion hides it', function () {
     $school = School::factory()->active()->create();
     $owner = setupUserForDashboard($school, SchoolRole::Owner);
 
-    // 0 of 7 on an empty school (step 5 must stay incomplete when 0 active grades exist)
+    // 0 of 8 on an empty school (step 5 and step 8 stay incomplete when 0 active grades/sections exist)
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
         ->assertSee('data-test="setup-checklist"', false)
-        ->assertSee('0 of 7 complete')
+        ->assertSee('0 of 8 complete')
         ->assertDontSee('✅')
         ->assertSee(route('setup.academic-years', ['school' => $school->id]), false)
         ->assertSee(route('setup.grades', ['school' => $school->id]), false)
@@ -171,7 +171,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('0 of 7 complete');
+        ->assertSee('0 of 8 complete');
 
     CurrentSchool::set($school);
     $currentYear = AcademicYear::factory()->for($school)->create([
@@ -185,7 +185,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('1 of 7 complete')
+        ->assertSee('1 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-academic-year"', '✅', 'data-test="checklist-step-grades"', '⬜']);
 
     // Step 2: archived grade alone leaves step 2 incomplete; active grade completes step 2.
@@ -198,18 +198,20 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('2 of 7 complete')
+        ->assertSee('2 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-grades"', '✅', 'data-test="checklist-step-sections"', '⬜']);
 
     // Step 3: section in an older year does not complete step 3; section in current year does.
     CurrentSchool::set($school);
     $oldSection = Section::factory()->for($school)->for($oldYear, 'academicYear')->for($gradeOne)->create(['name' => 'Old']);
+    $oldSection->class_teacher_user_id = $owner->id;
+    $oldSection->save();
     CurrentSchool::forget();
 
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('2 of 7 complete');
+        ->assertSee('2 of 8 complete');
 
     CurrentSchool::set($school);
     $currentSection = Section::factory()->for($school)->for($currentYear, 'academicYear')->for($gradeOne)->create(['name' => 'A']);
@@ -218,7 +220,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('3 of 7 complete')
+        ->assertSee('3 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-sections"', '✅', 'data-test="checklist-step-subjects"', '⬜']);
 
     // Step 4: active subject completes step 4; assigning to only 1 of 2 grades leaves step 5 incomplete.
@@ -231,7 +233,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('4 of 7 complete')
+        ->assertSee('4 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-subjects"', '✅', 'data-test="checklist-step-curriculum"', '⬜']);
 
     // Step 5: assigning a subject to the remaining active grade completes step 5, leaving step 6 incomplete.
@@ -243,7 +245,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
         ->assertSee('data-test="setup-checklist"', false)
-        ->assertSee('5 of 7 complete')
+        ->assertSee('5 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-curriculum"', '✅', 'data-test="checklist-step-staff"', '⬜']);
 
     // Active Parents, disabled staff, and foreign-school staff do not satisfy step 6.
@@ -261,10 +263,10 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('5 of 7 complete');
+        ->assertSee('5 of 8 complete');
 
-    // Step 6: adding an active non-Owner staff member completes 6 of 7, leaving step 7 incomplete.
-    setupUserForDashboard($school, SchoolRole::Teacher);
+    // Step 6: adding an active non-Owner staff member completes 6 of 8, leaving step 7 incomplete.
+    $teacher = setupUserForDashboard($school, SchoolRole::Teacher);
 
     // An old-year enrollment must not satisfy step 7.
     CurrentSchool::set($school);
@@ -275,13 +277,30 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
     $this->actingAs($owner)
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
-        ->assertSee('6 of 7 complete')
+        ->assertSee('6 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-staff"', '✅', 'data-test="checklist-step-students"', '⬜']);
 
-    // Step 7: adding an active current-year enrollment completes 7 of 7 and hides the checklist.
+    // Step 7: adding an active current-year enrollment completes 7 of 8, leaving step 8 (class teachers) incomplete.
     CurrentSchool::set($school);
     $studentTwo = Student::factory()->for($school)->create();
     Enrollment::factory()->for($school)->for($studentTwo)->forSection($currentSection)->create();
+    $secondCurrentSection = Section::factory()->for($school)->for($currentYear, 'academicYear')->for($gradeTwo)->create(['name' => 'A']);
+    $currentSection->class_teacher_user_id = $teacher->id;
+    $currentSection->save();
+    CurrentSchool::forget();
+
+    // Only 1 of 2 current-year sections has a class teacher, so step 8 stays incomplete.
+    $this->actingAs($owner)
+        ->get(route('dashboard', ['school' => $school->id]))
+        ->assertOk()
+        ->assertSee('data-test="setup-checklist"', false)
+        ->assertSee('7 of 8 complete')
+        ->assertSeeInOrder(['data-test="checklist-step-students"', '✅', 'data-test="checklist-step-class-teachers"', '⬜']);
+
+    // Step 8: assigning a class teacher to every current-year section completes 8 of 8 and hides the checklist.
+    CurrentSchool::set($school);
+    $secondCurrentSection->class_teacher_user_id = $teacher->id;
+    $secondCurrentSection->save();
     CurrentSchool::forget();
 
     $this->actingAs($owner)
@@ -289,7 +308,7 @@ it('tracks each setup checklist step accurately from 0 of 7 until completion hid
         ->assertOk()
         ->assertDontSee('data-test="setup-checklist"', false)
         ->assertSee('data-test="setup-stats"', false)
-        ->assertSeeInOrder(['Active grades', '2', 'Current-year sections', '1', 'Active subjects', '1', 'Active students', '1']);
+        ->assertSeeInOrder(['Active grades', '2', 'Current-year sections', '2', 'Active subjects', '1', 'Active students', '1']);
 });
 
 it('scopes quick counts, checklist visibility, and welcome card by role', function () {
@@ -376,7 +395,7 @@ it('isolates counts and setup checklist state per school', function () {
 
     $owner = setupUserForDashboard($schoolA, SchoolRole::Owner);
     setupUserForDashboard($schoolB, SchoolRole::Owner, $owner);
-    setupUserForDashboard($schoolB, SchoolRole::Teacher);
+    $teacherB = setupUserForDashboard($schoolB, SchoolRole::Teacher);
 
     CurrentSchool::set($schoolB);
     $yearB = AcademicYear::factory()->for($schoolB)->create([
@@ -386,7 +405,11 @@ it('isolates counts and setup checklist state per school', function () {
     $gradeB = Grade::factory()->for($schoolB)->create();
     $gradeB2 = Grade::factory()->for($schoolB)->create();
     $sectionA = Section::factory()->for($schoolB)->for($yearB, 'academicYear')->for($gradeB)->create(['name' => 'A']);
-    Section::factory()->for($schoolB)->for($yearB, 'academicYear')->for($gradeB2)->create(['name' => 'B']);
+    $sectionB = Section::factory()->for($schoolB)->for($yearB, 'academicYear')->for($gradeB2)->create(['name' => 'B']);
+    $sectionA->class_teacher_user_id = $teacherB->id;
+    $sectionA->save();
+    $sectionB->class_teacher_user_id = $teacherB->id;
+    $sectionB->save();
     $subjectB = Subject::factory()->for($schoolB)->create();
     GradeSubject::factory()->for($schoolB)->for($gradeB)->for($subjectB)->create();
     GradeSubject::factory()->for($schoolB)->for($gradeB2)->for($subjectB)->create();
@@ -399,7 +422,7 @@ it('isolates counts and setup checklist state per school', function () {
         ->assertOk()
         ->assertSee('School A')
         ->assertSee('No current academic year')
-        ->assertSee('0 of 7 complete')
+        ->assertSee('0 of 8 complete')
         ->assertSeeInOrder(['Active grades', '0', 'Current-year sections', '0', 'Active subjects', '0', 'Active students', '0']);
 
     $this->actingAs($owner)
@@ -511,7 +534,7 @@ it('keeps the curriculum checklist step incomplete when a grade only has archive
         ->get(route('dashboard', ['school' => $school->id]))
         ->assertOk()
         ->assertSee('data-test="setup-checklist"', false)
-        ->assertSee('4 of 7 complete')
+        ->assertSee('4 of 8 complete')
         ->assertSeeInOrder(['data-test="checklist-step-subjects"', '✅', 'data-test="checklist-step-curriculum"', '⬜']);
 });
 

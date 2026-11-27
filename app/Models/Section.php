@@ -24,11 +24,13 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string $name
  * @property int|null $capacity
  * @property string|null $room
+ * @property string|null $class_teacher_user_id
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read School $school
  * @property-read AcademicYear $academicYear
  * @property-read Grade $grade
+ * @property-read User|null $classTeacher
  */
 #[Fillable([
     'name',
@@ -118,6 +120,16 @@ class Section extends Model
     public function grade(): BelongsTo
     {
         return $this->belongsTo(Grade::class);
+    }
+
+    /**
+     * Get the class teacher assigned to this section, if any.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function classTeacher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'class_teacher_user_id');
     }
 
     /**

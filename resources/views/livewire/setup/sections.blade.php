@@ -45,6 +45,15 @@
         />
     @endif
 
+    @if ($errors->has('class_teacher_user_id') || $errors->has('academic_year_id'))
+        <flux:callout
+            variant="danger"
+            icon="exclamation-triangle"
+            :heading="$errors->first('class_teacher_user_id') ?: $errors->first('academic_year_id')"
+            data-test="section-teacher-error"
+        />
+    @endif
+
     @if ($this->academicYears->isEmpty())
         <flux:card class="p-6">
             <div class="py-10 text-center">
@@ -86,6 +95,7 @@
                             <flux:table.column>{{ __('Section') }}</flux:table.column>
                             <flux:table.column>{{ __('Room') }}</flux:table.column>
                             <flux:table.column>{{ __('Capacity') }}</flux:table.column>
+                            <flux:table.column>{{ __('Class teacher') }}</flux:table.column>
                             @if ($this->canManage && ! $this->isSelectedYearClosed)
                                 <flux:table.column align="end">{{ __('Actions') }}</flux:table.column>
                             @endif
@@ -97,6 +107,66 @@
                                     <flux:table.cell variant="strong">{{ $section->name }}</flux:table.cell>
                                     <flux:table.cell>{{ $section->room ?? '—' }}</flux:table.cell>
                                     <flux:table.cell>{{ $section->capacity ?? '—' }}</flux:table.cell>
+                                    <flux:table.cell>
+                                        @php
+                                            $teacherDisabled = $this->isAssignedTeacherDisabled($section);
+                                        @endphp
+                                        @if ($this->canAssignClassTeacher && ! $this->isSelectedYearClosed)
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <flux:select
+                                                    size="sm"
+                                                    wire:change="assignClassTeacher('{{ $section->id }}', $event.target.value)"
+                                                    data-test="assign-class-teacher-{{ $section->id }}"
+                                                >
+                                                    <flux:select.option
+                                                        value=""
+                                                        :selected="$section->class_teacher_user_id === null"
+                                                    >
+                                                        {{ __('Unassigned') }}
+                                                    </flux:select.option>
+
+                                                    @if ($teacherDisabled && $section->classTeacher !== null)
+                                                        <flux:select.option
+                                                            :value="$section->class_teacher_user_id"
+                                                            selected
+                                                            disabled
+                                                        >
+                                                            {{ $section->classTeacher->name }} ({{ __('Disabled') }})
+                                                        </flux:select.option>
+                                                    @endif
+
+                                                    @foreach ($this->activeClassTeacherCandidates as $candidate)
+                                                        @php
+                                                            $candidateRole = $candidate->staffRole();
+                                                        @endphp
+                                                        <flux:select.option
+                                                            :value="$candidate->user_id"
+                                                            :selected="$section->class_teacher_user_id === $candidate->user_id"
+                                                            wire:key="teacher-opt-{{ $section->id }}-{{ $candidate->user_id }}"
+                                                        >
+                                                            {{ $candidate->user?->name ?? '' }}@if ($candidateRole !== null) ({{ $candidateRole->value }})@endif
+                                                        </flux:select.option>
+                                                    @endforeach
+                                                </flux:select>
+
+                                                @if ($teacherDisabled)
+                                                    <flux:badge color="amber" size="sm" data-test="teacher-disabled-badge-{{ $section->id }}">
+                                                        {{ __('Disabled') }}
+                                                    </flux:badge>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span>{{ $section->classTeacher?->name ?? '—' }}</span>
+
+                                                @if ($teacherDisabled)
+                                                    <flux:badge color="amber" size="sm" data-test="teacher-disabled-badge-{{ $section->id }}">
+                                                        {{ __('Disabled') }}
+                                                    </flux:badge>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </flux:table.cell>
 
                                     @if ($this->canManage && ! $this->isSelectedYearClosed)
                                         <flux:table.cell align="end">
