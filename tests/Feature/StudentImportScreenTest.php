@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\Livewire;
+use OpenSpout\Common\Entity\Row as OpenSpoutRow;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\SimpleExcel\SimpleExcelReader;
 use Spatie\SimpleExcel\SimpleExcelWriter;
@@ -101,14 +102,25 @@ function makeScreenUploadFile(string $filename, array $headers, array $rows, str
         @unlink($base);
     }
 
-    $writer = SimpleExcelWriter::create($path, $extension)->noHeaderRow();
-    $writer->addRow($headers);
+    if ($extension === 'xlsx') {
+        $writer = StudentImportColumns::openXlsxWriter($path);
+        $writer->addRow(OpenSpoutRow::fromValues($headers));
 
-    foreach ($rows as $row) {
-        $writer->addRow($row);
+        foreach ($rows as $row) {
+            $writer->addRow(OpenSpoutRow::fromValues($row));
+        }
+
+        $writer->close();
+    } else {
+        $writer = SimpleExcelWriter::create($path, $extension)->noHeaderRow();
+        $writer->addRow($headers);
+
+        foreach ($rows as $row) {
+            $writer->addRow($row);
+        }
+
+        $writer->close();
     }
-
-    $writer->close();
 
     $binary = (string) file_get_contents($path);
     @unlink($path);

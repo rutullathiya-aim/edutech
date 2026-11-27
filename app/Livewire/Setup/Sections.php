@@ -28,6 +28,7 @@ use Livewire\Component;
  * @property-read bool $canManage
  * @property-read bool $canAssignClassTeacher
  * @property-read Collection<int, Membership> $activeClassTeacherCandidates
+ * @property-read list<string> $activeClassTeacherUserIds
  */
 #[Title('Sections')]
 class Sections extends Component
@@ -39,6 +40,9 @@ class Sections extends Component
 
     #[Locked]
     public ?string $deletingId = null;
+
+    #[Locked]
+    public int $teacherSelectVersion = 0;
 
     public string $academic_year_id = '';
 
@@ -185,15 +189,20 @@ class Sections extends Component
     }
 
     /**
-     * Determine whether a section's currently assigned class teacher no longer holds an active staff membership.
+     * Get the user IDs of staff members who currently hold an active membership in the current school.
+     *
+     * @return list<string>
      */
-    public function isAssignedTeacherDisabled(Section $section): bool
+    #[Computed]
+    public function activeClassTeacherUserIds(): array
     {
-        if ($section->class_teacher_user_id === null) {
-            return false;
+        $ids = [];
+
+        foreach ($this->activeClassTeacherCandidates as $candidate) {
+            $ids[] = $candidate->user_id;
         }
 
-        return ! $this->activeClassTeacherCandidates->contains('user_id', $section->class_teacher_user_id);
+        return $ids;
     }
 
     /**
@@ -213,9 +222,12 @@ class Sections extends Component
         $trimmedTeacherId = trim($teacherUserId);
         $teacher = $trimmedTeacherId !== '' ? User::query()->findOrFail($trimmedTeacherId) : null;
 
-        $assignClassTeacher->handle($actor, $section, $teacher);
-
-        unset($this->gradeGroups, $this->activeClassTeacherCandidates);
+        try {
+            $assignClassTeacher->handle($actor, $section, $teacher);
+        } finally {
+            $this->teacherSelectVersion++;
+            unset($this->gradeGroups, $this->activeClassTeacherCandidates, $this->activeClassTeacherUserIds);
+        }
 
         Flux::toast(
             variant: 'success',

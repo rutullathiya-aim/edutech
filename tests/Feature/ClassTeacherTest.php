@@ -202,6 +202,21 @@ test('Sections screen displays Class teacher column, allows Owner/Admin assignme
         ->call('assignClassTeacher', $section->id, '')
         ->assertForbidden();
 
+    // Disabling a teacher while another tab fails assignment bumps teacherSelectVersion so the browser select resets to DB state.
+    [$staleTeacher, $staleMembership] = createClassTeacherMember($school, SchoolRole::Teacher, true, 'Stale Teacher');
+    setPermissionsTeamId($school->id);
+    $staleTabLw = Livewire::actingAs($owner)->test(SectionsScreen::class)->assertOk();
+    $staleMembership->disable();
+
+    $versionBeforeError = $staleTabLw->get('teacherSelectVersion');
+
+    $staleTabLw->call('assignClassTeacher', $section->id, $staleTeacher->id)
+        ->assertHasErrors(['class_teacher_user_id'])
+        ->assertSet('teacherSelectVersion', $versionBeforeError + 1)
+        ->assertSee('data-test="section-teacher-error"', false);
+
+    expect($section->fresh()->class_teacher_user_id)->toBe($teacher->id);
+
     // Owner can unassign cleanly back to null.
     Livewire::actingAs($owner)
         ->test(SectionsScreen::class)

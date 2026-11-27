@@ -10,7 +10,7 @@ use App\Support\SpreadsheetCell;
 use App\Tenant\CurrentSchool;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Spatie\SimpleExcel\SimpleExcelWriter;
+use OpenSpout\Common\Entity\Row;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BuildImportErrorReport
@@ -32,17 +32,15 @@ class BuildImportErrorReport
         $errorsByRow = $validation->errorsByRow();
 
         $tempPath = StudentImportColumns::allocateTempXlsxPath('student-errors');
-        $writer = SimpleExcelWriter::create($tempPath, 'xlsx')
-            ->noHeaderRow()
-            ->nameCurrentSheet('Failed rows');
+        $writer = StudentImportColumns::openXlsxWriter($tempPath, 'Failed rows');
 
-        $writer->addRow([
+        $writer->addRow(Row::fromValues([
             ...array_map(
                 static fn (string $column): string => StudentImportColumns::DEFINITIONS[$column] ? "{$column}*" : $column,
                 $allowedColumns,
             ),
             'errors',
-        ]);
+        ]));
 
         foreach ($parsed->rows as $rowData) {
             $rowNumber = $rowData['row_number'];
@@ -70,18 +68,19 @@ class BuildImportErrorReport
             ));
             $exportRow[] = SpreadsheetCell::escapeFormula($errorSummary);
 
-            $writer->addRow($exportRow);
+            $writer->addRow(Row::fromValues($exportRow));
         }
 
-        $writer->addNewSheetAndMakeItCurrent('Error details');
-        $writer->addRow(['row', 'column', 'message']);
+        $writer->addNewSheetAndMakeItCurrent();
+        $writer->getCurrentSheet()->setName('Error details');
+        $writer->addRow(Row::fromValues(['row', 'column', 'message']));
 
         foreach ($validation->errors as $error) {
-            $writer->addRow([
+            $writer->addRow(Row::fromValues([
                 $error['row'],
                 SpreadsheetCell::escapeFormula($error['column']),
                 SpreadsheetCell::escapeFormula($error['message']),
-            ]);
+            ]));
         }
 
         $writer->close();

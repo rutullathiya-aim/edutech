@@ -11,8 +11,16 @@ use App\Models\Grade;
 use App\Models\Student;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use FilesystemIterator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use OpenSpout\Reader\XLSX\Options as XlsxReaderOptions;
+use OpenSpout\Reader\XLSX\Reader as XlsxReader;
+use OpenSpout\Writer\XLSX\Options as XlsxWriterOptions;
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
 use Throwable;
 
 class StudentImportColumns
@@ -293,21 +301,63 @@ class StudentImportColumns
     }
 
     /**
-     * Allocate a unique .xlsx temporary file path inside storage/app/private/tmp.
+     * Ensure the private spreadsheet temp directory exists and return its path.
+     *
+     * @return non-empty-string
      */
-    public static function allocateTempXlsxPath(string $prefix): string
+    public static function ensureTempDirectory(): string
     {
         $directory = self::tempDirectory();
+
+        if ($directory === '') {
+            throw new RuntimeException('Temporary spreadsheet directory path cannot be empty.');
+        }
 
         if (! is_dir($directory)) {
             mkdir($directory, 0755, true);
         }
 
+        return $directory;
+    }
+
+    /**
+     * Allocate a unique .xlsx temporary file path inside storage/app/private/tmp.
+     */
+    public static function allocateTempXlsxPath(string $prefix): string
+    {
+        $directory = self::ensureTempDirectory();
+
         return $directory.DIRECTORY_SEPARATOR."{$prefix}-".Str::ulid().'.xlsx';
     }
 
     /**
-     * Delete leftover temporary spreadsheets inside storage/app/private/tmp older than the given age in seconds.
+     * Open an OpenSpout XLSX writer whose internal scratch folder stays in storage/app/private/tmp.
+     */
+    public static function openXlsxWriter(string $filePath, ?string $sheetName = null): XlsxWriter
+    {
+        $writer = new XlsxWriter(new XlsxWriterOptions(tempFolder: self::ensureTempDirectory()));
+        $writer->openToFile($filePath);
+
+        if ($sheetName !== null) {
+            $writer->getCurrentSheet()->setName($sheetName);
+        }
+
+        return $writer;
+    }
+
+    /**
+     * Open an OpenSpout XLSX reader whose internal scratch folder stays in storage/app/private/tmp.
+     */
+    public static function openXlsxReader(string $filePath): XlsxReader
+    {
+        $reader = new XlsxReader(new XlsxReaderOptions(tempFolder: self::ensureTempDirectory()));
+        $reader->open($filePath);
+
+        return $reader;
+    }
+
+    /**
+     * Delete leftover temporary spreadsheets and empty subdirectories inside storage/app/private/tmp older than the given age in seconds.
      */
     public static function pruneExpiredTempFiles(int $maxAgeSeconds = 3600): int
     {
@@ -320,15 +370,56 @@ class StudentImportColumns
         $cutoff = time() - $maxAgeSeconds;
         $deleted = 0;
 
-        foreach (glob($directory.DIRECTORY_SEPARATOR.'*') ?: [] as $path) {
-            if (! is_file($path)) {
+        /** @var array<string, int> $initialDirMtimes */
+        $initialDirMtimes = [];
+
+        $scanIterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($scanIterator as $item) {
+            if ($item->isDir()) {
+                $mtime = filemtime($item->getPathname());
+
+                if ($mtime !== false) {
+                    $initialDirMtimes[$item->getPathname()] = $mtime;
+                }
+            }
+        }
+
+        $pruneIterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($pruneIterator as $item) {
+            if ($item->getFilename() === '.gitignore') {
                 continue;
             }
 
-            $mtime = filemtime($path);
+            $path = $item->getPathname();
 
-            if ($mtime !== false && $mtime < $cutoff && @unlink($path)) {
-                $deleted++;
+            if ($item->isDir()) {
+                $mtime = $initialDirMtimes[$path] ?? filemtime($path);
+
+                if ($mtime !== false && $mtime < $cutoff) {
+                    $entries = @scandir($path);
+
+                    if (is_array($entries) && count($entries) <= 2 && @rmdir($path)) {
+                        $deleted++;
+                    }
+                }
+
+                continue;
+            }
+
+            if ($item->isFile() || $item->isLink()) {
+                $mtime = filemtime($path);
+
+                if ($mtime !== false && $mtime < $cutoff && @unlink($path)) {
+                    $deleted++;
+                }
             }
         }
 

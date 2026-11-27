@@ -109,12 +109,14 @@
                                     <flux:table.cell>{{ $section->capacity ?? '—' }}</flux:table.cell>
                                     <flux:table.cell>
                                         @php
-                                            $teacherDisabled = $this->isAssignedTeacherDisabled($section);
+                                            $teacherDisabled = $section->class_teacher_user_id !== null
+                                                && ! in_array($section->class_teacher_user_id, $this->activeClassTeacherUserIds, true);
                                         @endphp
                                         @if ($this->canAssignClassTeacher && ! $this->isSelectedYearClosed)
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <flux:select
                                                     size="sm"
+                                                    wire:key="ct-{{ $section->id }}-{{ $section->class_teacher_user_id ?? 'none' }}-{{ $teacherSelectVersion }}"
                                                     wire:change="assignClassTeacher('{{ $section->id }}', $event.target.value)"
                                                     data-test="assign-class-teacher-{{ $section->id }}"
                                                 >

@@ -33,6 +33,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use OpenSpout\Common\Entity\Row as OpenSpoutRow;
 use Spatie\Activitylog\Support\ActivityLogStatus;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -111,6 +112,19 @@ function writeImportSpreadsheet(array $headers, array $rows, string $extension =
 
     if (is_string($base) && file_exists($base)) {
         @unlink($base);
+    }
+
+    if ($extension === 'xlsx') {
+        $writer = StudentImportColumns::openXlsxWriter($path);
+        $writer->addRow(OpenSpoutRow::fromValues($headers));
+
+        foreach ($rows as $row) {
+            $writer->addRow(OpenSpoutRow::fromValues($row));
+        }
+
+        $writer->close();
+
+        return $path;
     }
 
     $writer = SimpleExcelWriter::create($path, $extension)->noHeaderRow();
@@ -264,19 +278,39 @@ test('import template contains Students sheet, Instructions sheet with active gr
 
     @unlink($templatePath);
 
-    // Temp cleanup prunes files older than 1 hour and keeps fresh files.
+    // Temp cleanup prunes expired files and empty subfolders older than 1 hour and keeps fresh entries.
     $staleTmp = StudentImportColumns::allocateTempXlsxPath('stale-check');
     $freshTmp = StudentImportColumns::allocateTempXlsxPath('fresh-check');
+    $staleEmptyDir = StudentImportColumns::tempDirectory().DIRECTORY_SEPARATOR.'stale-empty-'.Str::ulid();
+    $staleNestedDir = StudentImportColumns::tempDirectory().DIRECTORY_SEPARATOR.'stale-nested-'.Str::ulid();
+    $staleInnerFile = $staleNestedDir.DIRECTORY_SEPARATOR.'old.xml';
+    $freshEmptyDir = StudentImportColumns::tempDirectory().DIRECTORY_SEPARATOR.'fresh-empty-'.Str::ulid();
+
+    mkdir($staleEmptyDir, 0755, true);
+    mkdir($staleNestedDir, 0755, true);
+    mkdir($freshEmptyDir, 0755, true);
+
     file_put_contents($staleTmp, 'stale');
     file_put_contents($freshTmp, 'fresh');
+    file_put_contents($staleInnerFile, 'old');
+
     touch($staleTmp, time() - 7200);
     touch($freshTmp, time() - 60);
+    touch($staleInnerFile, time() - 7200);
+    touch($staleEmptyDir, time() - 7200);
+    touch($staleNestedDir, time() - 7200);
+    touch($freshEmptyDir, time() - 60);
 
-    expect(StudentImportColumns::pruneExpiredTempFiles(3600))->toBeGreaterThanOrEqual(1)
+    expect(StudentImportColumns::pruneExpiredTempFiles(3600))->toBeGreaterThanOrEqual(4)
         ->and(file_exists($staleTmp))->toBeFalse()
-        ->and(file_exists($freshTmp))->toBeTrue();
+        ->and(is_dir($staleEmptyDir))->toBeFalse()
+        ->and(file_exists($staleInnerFile))->toBeFalse()
+        ->and(is_dir($staleNestedDir))->toBeFalse()
+        ->and(file_exists($freshTmp))->toBeTrue()
+        ->and(is_dir($freshEmptyDir))->toBeTrue();
 
     @unlink($freshTmp);
+    @rmdir($freshEmptyDir);
 
     // Clerk with StudentsImport permission only (without StudentsViewSensitive) omits sensitive columns.
     $limitedRole = Role::create([
@@ -1013,12 +1047,12 @@ test('XLSX formula cells use computed value instead of formula string and uncalc
         @unlink($base);
     }
 
-    $writer = SimpleExcelWriter::create($calculatedPath, 'xlsx')->noHeaderRow();
-    $writer->addRow($headers);
-    $writer->addRow(mapImportRow($headers, validImportRowMap([
+    $writer = StudentImportColumns::openXlsxWriter($calculatedPath);
+    $writer->addRow(OpenSpoutRow::fromValues($headers));
+    $writer->addRow(OpenSpoutRow::fromValues(mapImportRow($headers, validImportRowMap([
         'admission_no' => 'FRM-002',
         'name' => '=B2&" "&C2',
-    ])));
+    ]))));
     $writer->close();
 
     // Inject Excel's cached formula result (t="str" + <v>Kavya Deshmukh</v>) into the worksheet XML (since OpenSpout writes <f> without <v>).

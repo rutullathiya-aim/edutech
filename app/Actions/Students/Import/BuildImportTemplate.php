@@ -15,7 +15,7 @@ use App\Tenant\CurrentSchool;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Spatie\SimpleExcel\SimpleExcelWriter;
+use OpenSpout\Common\Entity\Row;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BuildImportTemplate
@@ -47,16 +47,16 @@ class BuildImportTemplate
             : null;
 
         $tempPath = StudentImportColumns::allocateTempXlsxPath('student-template');
-        $writer = SimpleExcelWriter::create($tempPath, 'xlsx')
-            ->noHeaderRow()
-            ->nameCurrentSheet('Students');
+        $writer = StudentImportColumns::openXlsxWriter($tempPath, 'Students');
 
         $headers = StudentImportColumns::templateHeaders($canViewSensitive);
-        $writer->addRow($headers);
+        $writer->addRow(Row::fromValues($headers));
 
-        $writer->addNewSheetAndMakeItCurrent('Instructions');
+        $writer->addNewSheetAndMakeItCurrent();
+        $writer->getCurrentSheet()->setName('Instructions');
+
         foreach ($this->instructionRows($canViewSensitive, $headers, $targetYear, $activeGrades, $sectionsByGrade, $firstGrade, $firstSection) as $row) {
-            $writer->addRow($row);
+            $writer->addRow(Row::fromValues($row));
         }
 
         $writer->close();

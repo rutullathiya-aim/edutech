@@ -10,6 +10,10 @@ use DateTimeInterface;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use OpenSpout\Common\Entity\Cell;
+use OpenSpout\Common\Entity\Cell\FormulaCell;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Reader\XLSX\Reader;
 use Spatie\SimpleExcel\SimpleExcelReader;
 use Throwable;
 
@@ -50,13 +54,7 @@ class ParseStudentImportFile
         $reader = null;
 
         try {
-            $reader = SimpleExcelReader::create($filePath, $normalizedExtension)
-                ->noHeaderRow();
-
-            if ($normalizedExtension === 'csv') {
-                // CSV cells have no cached formula result; keep literal '=' text instead of letting OpenSpout blank it out.
-                $reader->keepFormulas();
-            }
+            [$reader, $rawRows] = $this->openRowSource($filePath, $normalizedExtension);
 
             $columnIndexMap = [];
             $presentColumns = [];
@@ -64,7 +62,7 @@ class ParseStudentImportFile
             $headerParsed = false;
             $spreadsheetRowNumber = 0;
 
-            foreach ($reader->getRows() as $rawRow) {
+            foreach ($rawRows as $rawRow) {
                 $spreadsheetRowNumber++;
 
                 if ($spreadsheetRowNumber > StudentImportColumns::MAX_PHYSICAL_ROWS) {
@@ -73,10 +71,6 @@ class ParseStudentImportFile
                             'max' => StudentImportColumns::MAX_PHYSICAL_ROWS,
                         ]),
                     ]);
-                }
-
-                if (! is_array($rawRow)) {
-                    continue;
                 }
 
                 $this->assertValidUtf8Row($rawRow);
@@ -155,6 +149,56 @@ class ParseStudentImportFile
             missingRequiredColumns: $missingRequired,
             rows: $rows,
         );
+    }
+
+    /**
+     * Open the appropriate CSV or XLSX row iterator using private temp storage for XLSX extraction.
+     *
+     * @return array{0: SimpleExcelReader|Reader, 1: iterable<array<array-key, mixed>>}
+     */
+    private function openRowSource(string $filePath, string $extension): array
+    {
+        if ($extension === 'csv') {
+            // CSV cells have no cached formula result; keep literal '=' text instead of letting OpenSpout blank it out.
+            $csvReader = SimpleExcelReader::create($filePath, 'csv')
+                ->noHeaderRow()
+                ->keepFormulas();
+
+            return [$csvReader, $csvReader->getRows()];
+        }
+
+        $xlsxReader = StudentImportColumns::openXlsxReader($filePath);
+        $firstSheet = null;
+
+        foreach ($xlsxReader->getSheetIterator() as $index => $sheet) {
+            if ($index === 1) {
+                $firstSheet = $sheet;
+                break;
+            }
+        }
+
+        if ($firstSheet === null) {
+            throw ValidationException::withMessages([
+                'file' => __('The uploaded spreadsheet is corrupt or invalid for the selected file type.'),
+            ]);
+        }
+
+        $rows = (static function () use ($firstSheet): iterable {
+            /** @var Row $row */
+            foreach ($firstSheet->getRowIterator() as $row) {
+                $values = array_map(
+                    static fn (Cell $cell): mixed => $cell instanceof FormulaCell
+                        ? $cell->getComputedValue()
+                        : $cell->getValue(),
+                    $row->cells,
+                );
+                ksort($values);
+
+                yield $values;
+            }
+        })();
+
+        return [$xlsxReader, $rows];
     }
 
     /**
