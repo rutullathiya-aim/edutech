@@ -40,6 +40,18 @@ class StudentImportColumns
     public const array ALLOWED_EXTENSIONS = ['xlsx', 'csv'];
 
     /**
+     * Determine whether a trimmed cell value starts with a formula trigger character ('=' or '@').
+     */
+    public static function startsWithDisallowedFormulaCharacter(?string $value): bool
+    {
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        return $value[0] === '=' || $value[0] === '@';
+    }
+
+    /**
      * Ordered list of canonical student import columns with whether each header carries an asterisk.
      *
      * @var array<string, bool>

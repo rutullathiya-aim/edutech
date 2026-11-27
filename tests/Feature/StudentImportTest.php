@@ -1130,3 +1130,59 @@ test('parser rejects non-UTF-8 CSV bytes and spreadsheets exceeding 5000 physica
         ->toThrow(ValidationException::class, '5000');
     @unlink($blankCsvPath);
 });
+
+test('validator rejects leading equals or at characters in CSV free-text columns while allowing plus in mobile and blood group', function () {
+    $school = School::factory()->active()->create();
+    $admin = createImportActor($school, SchoolRole::Admin);
+    $structure = createImportSchoolStructure($school);
+
+    $headers = StudentImportColumns::templateHeaders(true);
+
+    // CSV row with formula characters in text fields alongside valid '+91...' mobile and 'O+' / 'A-' blood groups.
+    $csvPath = writeImportSpreadsheet($headers, [
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'CSV-FRM-1',
+            'name' => '=HYPERLINK("https://evil.example","Click")',
+            'father_name' => '@SUM(1,2)',
+            'father_mobile' => '+91 98765 43210',
+            'mother_name' => '=1+1',
+            'mother_mobile' => '+91 98765 43211',
+            'guardian_name' => '@Guardian',
+            'guardian_mobile' => '+91 98765 43212',
+            'address_line' => '=cmd|calc',
+            'city' => '@Ahmedabad',
+            'mother_tongue' => '=Hindi',
+            'previous_school' => '@OldSchool',
+            'religion' => '=Religion',
+            'blood_group' => 'A-',
+        ])),
+    ], 'csv');
+
+    $parsed = (new ParseStudentImportFile)->handle($admin, $csvPath, 'csv');
+    $validation = (new ValidateStudentImport)->handle($admin, $structure['year'], $parsed);
+
+    expect($validation->isValid())->toBeFalse();
+
+    $formulaErrorColumns = collect($validation->errors)
+        ->filter(static fn (array $err): bool => str_contains($err['message'], 'formula character'))
+        ->pluck('column')
+        ->all();
+
+    expect($formulaErrorColumns)->toContain(
+        'name',
+        'father_name',
+        'mother_name',
+        'guardian_name',
+        'address_line',
+        'city',
+        'mother_tongue',
+        'previous_school',
+        'religion',
+    )->not->toContain('father_mobile', 'mother_mobile', 'guardian_mobile', 'blood_group');
+
+    expect(fn () => app(ImportStudents::class)->handle($admin, $structure['year']->id, $csvPath, 'csv', true))
+        ->toThrow(ValidationException::class);
+
+    expect(Student::query()->count())->toBe(0);
+    @unlink($csvPath);
+});

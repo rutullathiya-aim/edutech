@@ -148,6 +148,8 @@ class ValidateStudentImport
 
             if ($name === null) {
                 $addError('name', __('Student name is required.'));
+            } elseif (StudentImportColumns::startsWithDisallowedFormulaCharacter($name)) {
+                $addError('name', __('Cell starts with a formula character; enter plain text.'));
             } elseif (mb_strlen($name, 'UTF-8') > 150) {
                 $addError('name', __('Student name must not exceed 150 characters.'));
             }
@@ -223,12 +225,16 @@ class ValidateStudentImport
             }
 
             $addressLine = StudentImportColumns::normalizeCellString($cells['address_line'] ?? null);
-            if ($addressLine !== null && mb_strlen($addressLine, 'UTF-8') > 255) {
+            if ($addressLine !== null && StudentImportColumns::startsWithDisallowedFormulaCharacter($addressLine)) {
+                $addError('address_line', __('Cell starts with a formula character; enter plain text.'));
+            } elseif ($addressLine !== null && mb_strlen($addressLine, 'UTF-8') > 255) {
                 $addError('address_line', __('Address line must not exceed 255 characters.'));
             }
 
             $city = StudentImportColumns::normalizeCellString($cells['city'] ?? null);
-            if ($city !== null && mb_strlen($city, 'UTF-8') > 100) {
+            if ($city !== null && StudentImportColumns::startsWithDisallowedFormulaCharacter($city)) {
+                $addError('city', __('Cell starts with a formula character; enter plain text.'));
+            } elseif ($city !== null && mb_strlen($city, 'UTF-8') > 100) {
                 $addError('city', __('City must not exceed 100 characters.'));
             }
 
@@ -250,12 +256,16 @@ class ValidateStudentImport
             }
 
             $motherTongue = StudentImportColumns::normalizeCellString($cells['mother_tongue'] ?? null);
-            if ($motherTongue !== null && mb_strlen($motherTongue, 'UTF-8') > 50) {
+            if ($motherTongue !== null && StudentImportColumns::startsWithDisallowedFormulaCharacter($motherTongue)) {
+                $addError('mother_tongue', __('Cell starts with a formula character; enter plain text.'));
+            } elseif ($motherTongue !== null && mb_strlen($motherTongue, 'UTF-8') > 50) {
                 $addError('mother_tongue', __('Mother tongue must not exceed 50 characters.'));
             }
 
             $previousSchool = StudentImportColumns::normalizeCellString($cells['previous_school'] ?? null);
-            if ($previousSchool !== null && mb_strlen($previousSchool, 'UTF-8') > 150) {
+            if ($previousSchool !== null && StudentImportColumns::startsWithDisallowedFormulaCharacter($previousSchool)) {
+                $addError('previous_school', __('Cell starts with a formula character; enter plain text.'));
+            } elseif ($previousSchool !== null && mb_strlen($previousSchool, 'UTF-8') > 150) {
                 $addError('previous_school', __('Previous school must not exceed 150 characters.'));
             }
 
@@ -273,7 +283,9 @@ class ValidateStudentImport
                 }
 
                 $religion = StudentImportColumns::normalizeCellString($cells['religion'] ?? null);
-                if ($religion !== null && mb_strlen($religion, 'UTF-8') > 30) {
+                if ($religion !== null && StudentImportColumns::startsWithDisallowedFormulaCharacter($religion)) {
+                    $addError('religion', __('Cell starts with a formula character; enter plain text.'));
+                } elseif ($religion !== null && mb_strlen($religion, 'UTF-8') > 30) {
                     $addError('religion', __('Religion must not exceed 30 characters.'));
                 }
 
@@ -633,6 +645,8 @@ class ValidateStudentImport
                         ? __('Name is required for the selected primary contact.')
                         : __('Guardian name is required when a mobile number is provided.'),
                 );
+            } elseif (StudentImportColumns::startsWithDisallowedFormulaCharacter($slot['name'])) {
+                $addError($slot['name_col'], __('Cell starts with a formula character; enter plain text.'));
             } elseif (mb_strlen($slot['name'], 'UTF-8') > 150) {
                 $addError($slot['name_col'], __('Guardian name must not exceed 150 characters.'));
             }
