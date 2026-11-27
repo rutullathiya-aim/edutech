@@ -51,8 +51,12 @@ class ParseStudentImportFile
 
         try {
             $reader = SimpleExcelReader::create($filePath, $normalizedExtension)
-                ->noHeaderRow()
-                ->keepFormulas();
+                ->noHeaderRow();
+
+            if ($normalizedExtension === 'csv') {
+                // CSV cells have no cached formula result; keep literal '=' text instead of letting OpenSpout blank it out.
+                $reader->keepFormulas();
+            }
 
             $columnIndexMap = [];
             $presentColumns = [];
@@ -63,9 +67,19 @@ class ParseStudentImportFile
             foreach ($reader->getRows() as $rawRow) {
                 $spreadsheetRowNumber++;
 
+                if ($spreadsheetRowNumber > StudentImportColumns::MAX_PHYSICAL_ROWS) {
+                    throw ValidationException::withMessages([
+                        'file' => __('The uploaded spreadsheet exceeds the limit of :max rows including blank rows.', [
+                            'max' => StudentImportColumns::MAX_PHYSICAL_ROWS,
+                        ]),
+                    ]);
+                }
+
                 if (! is_array($rawRow)) {
                     continue;
                 }
+
+                $this->assertValidUtf8Row($rawRow);
 
                 if (! $headerParsed) {
                     if ($this->isBlankSpreadsheetRow($rawRow)) {
@@ -200,5 +214,21 @@ class ParseStudentImportFile
         }
 
         return true;
+    }
+
+    /**
+     * Reject non-UTF-8 byte sequences (for example ANSI CSVs saved by Excel) so database writes never fail silently.
+     *
+     * @param  array<array-key, mixed>  $rawRow
+     */
+    private function assertValidUtf8Row(array $rawRow): void
+    {
+        foreach ($rawRow as $value) {
+            if (is_string($value) && ! mb_check_encoding($value, 'UTF-8')) {
+                throw ValidationException::withMessages([
+                    'file' => __('Save the file as CSV UTF-8 or XLSX.'),
+                ]);
+            }
+        }
     }
 }

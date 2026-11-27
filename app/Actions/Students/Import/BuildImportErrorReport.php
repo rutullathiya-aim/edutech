@@ -31,7 +31,7 @@ class BuildImportErrorReport
         $allowedColumns = $this->resolveExportColumns($parsed->presentColumns, $canViewSensitive);
         $errorsByRow = $validation->errorsByRow();
 
-        $tempPath = $this->allocateTempXlsxPath();
+        $tempPath = StudentImportColumns::allocateTempXlsxPath('student-errors');
         $writer = SimpleExcelWriter::create($tempPath, 'xlsx')
             ->noHeaderRow()
             ->nameCurrentSheet('Failed rows');
@@ -128,20 +128,5 @@ class BuildImportErrorReport
         ));
 
         return $ordered !== [] ? $ordered : $allowed;
-    }
-
-    /**
-     * Allocate a clean temporary .xlsx path in PHP's system temp directory.
-     */
-    private function allocateTempXlsxPath(): string
-    {
-        $base = tempnam(sys_get_temp_dir(), 'stu_err_');
-        $xlsxPath = $base.'.xlsx';
-
-        if (is_string($base) && file_exists($base)) {
-            @unlink($base);
-        }
-
-        return $xlsxPath;
     }
 }

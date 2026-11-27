@@ -79,6 +79,8 @@ class ImportStudents
             ]);
         }
 
+        RateLimiter::hit($rateLimitKey, 3600);
+
         $parsed = $this->parser->handle($actor, $filePath, $extension);
 
         try {
@@ -246,8 +248,6 @@ class ImportStudents
             ]);
         }
 
-        RateLimiter::hit($rateLimitKey, 3600);
-
         return $result;
     }
 
@@ -402,6 +402,8 @@ class ImportStudents
         if (str_contains($message, 'enr_school_section_roll_unique') || str_contains($message, 'enrollments.roll_number')) {
             return __('One or more roll numbers were assigned concurrently. Run validation again before importing.');
         }
+
+        report($exception);
 
         return __('The import could not be completed because school records changed concurrently. Please try again.');
     }

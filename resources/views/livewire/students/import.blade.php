@@ -150,6 +150,12 @@
                         @endforeach
                     </flux:table.rows>
                 </flux:table>
+
+                @if ($remainingErrorCount > 0)
+                    <flux:text class="text-sm text-zinc-600 dark:text-zinc-400" data-test="remaining-errors-notice">
+                        {{ __('…and :count more error(s). Download the error report above to view every issue.', ['count' => $remainingErrorCount]) }}
+                    </flux:text>
+                @endif
             @elseif ($validCount > 0)
                 <flux:callout variant="success" icon="check-circle" data-test="dry-run-passed-callout">
                     <flux:callout.heading>{{ __('All :count row(s) passed validation', ['count' => $validCount]) }}</flux:callout.heading>

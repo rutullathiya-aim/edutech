@@ -23,6 +23,11 @@ class StudentImportColumns
     public const int MAX_ROWS = 1000;
 
     /**
+     * Maximum number of physical rows scanned (including blank rows) to guard against sparse-sheet DoS.
+     */
+    public const int MAX_PHYSICAL_ROWS = 5000;
+
+    /**
      * Maximum upload file size in bytes (5 MB).
      */
     public const int MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -212,11 +217,13 @@ class StudentImportColumns
             return self::parseExcelSerialDate((float) $trimmed);
         }
 
-        if (preg_match('/^(\d{2})([\/\-.])(\d{2})\2(\d{4})$/', $trimmed, $matches) !== 1) {
+        if (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})\2(\d{4})$/', $trimmed, $matches) !== 1) {
             return null;
         }
 
-        $candidate = "{$matches[1]}-{$matches[3]}-{$matches[4]}";
+        $day = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+        $month = str_pad($matches[3], 2, '0', STR_PAD_LEFT);
+        $candidate = "{$day}-{$month}-{$matches[4]}";
 
         try {
             $parsed = CarbonImmutable::createFromFormat('!d-m-Y', $candidate);
@@ -229,6 +236,91 @@ class StudentImportColumns
         }
 
         return $parsed->startOfDay();
+    }
+
+    /**
+     * Classify a non-empty date cell as either a native/numeric Excel date ('real') or a formatted string ('text').
+     */
+    public static function classifyDateCellKind(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof DateTimeInterface || is_int($value) || is_float($value)) {
+            return 'real';
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (is_numeric($trimmed) && strpbrk($trimmed, '/-.') === false) {
+            return 'real';
+        }
+
+        if (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})\2(\d{4})$/', $trimmed) === 1) {
+            return 'text';
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the private temporary directory used for generated import spreadsheets.
+     */
+    public static function tempDirectory(): string
+    {
+        return storage_path('app/private/tmp');
+    }
+
+    /**
+     * Allocate a unique .xlsx temporary file path inside storage/app/private/tmp.
+     */
+    public static function allocateTempXlsxPath(string $prefix): string
+    {
+        $directory = self::tempDirectory();
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        return $directory.DIRECTORY_SEPARATOR."{$prefix}-".Str::ulid().'.xlsx';
+    }
+
+    /**
+     * Delete leftover temporary spreadsheets inside storage/app/private/tmp older than the given age in seconds.
+     */
+    public static function pruneExpiredTempFiles(int $maxAgeSeconds = 3600): int
+    {
+        $directory = self::tempDirectory();
+
+        if (! is_dir($directory)) {
+            return 0;
+        }
+
+        $cutoff = time() - $maxAgeSeconds;
+        $deleted = 0;
+
+        foreach (glob($directory.DIRECTORY_SEPARATOR.'*') ?: [] as $path) {
+            if (! is_file($path)) {
+                continue;
+            }
+
+            $mtime = filemtime($path);
+
+            if ($mtime !== false && $mtime < $cutoff && @unlink($path)) {
+                $deleted++;
+            }
+        }
+
+        return $deleted;
     }
 
     /**

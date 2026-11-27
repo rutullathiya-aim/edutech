@@ -46,17 +46,16 @@ class BuildImportTemplate
             ? $sectionsByGrade->get($firstGrade->id)?->first()
             : null;
 
-        $tempPath = $this->allocateTempXlsxPath();
+        $tempPath = StudentImportColumns::allocateTempXlsxPath('student-template');
         $writer = SimpleExcelWriter::create($tempPath, 'xlsx')
             ->noHeaderRow()
             ->nameCurrentSheet('Students');
 
         $headers = StudentImportColumns::templateHeaders($canViewSensitive);
         $writer->addRow($headers);
-        $writer->addRow($this->exampleRow($headers, $firstGrade, $firstSection));
 
         $writer->addNewSheetAndMakeItCurrent('Instructions');
-        foreach ($this->instructionRows($canViewSensitive, $targetYear, $activeGrades, $sectionsByGrade) as $row) {
+        foreach ($this->instructionRows($canViewSensitive, $headers, $targetYear, $activeGrades, $sectionsByGrade, $firstGrade, $firstSection) as $row) {
             $writer->addRow($row);
         }
 
@@ -136,28 +135,32 @@ class BuildImportTemplate
     }
 
     /**
-     * Build guidance rows explaining formats, rules, and this school's active grades and sections.
+     * Build guidance rows explaining formats, rules, this school's active grades/sections, and one example student.
      *
+     * @param  list<string>  $headers
      * @param  \Illuminate\Database\Eloquent\Collection<int, Grade>  $activeGrades
      * @param  Collection<string, Collection<int, Section>>  $sectionsByGrade
      * @return list<array{0: string, 1: string}>
      */
     private function instructionRows(
         bool $canViewSensitive,
+        array $headers,
         ?AcademicYear $targetYear,
         \Illuminate\Database\Eloquent\Collection $activeGrades,
         Collection $sectionsByGrade,
+        ?Grade $firstGrade,
+        ?Section $firstSection,
     ): array {
         $rows = [
             ['Topic', 'Instructions & Allowed Values'],
-            ['Required columns (*)', 'Columns marked with * are mandatory: admission_no*, admission_date*, name*, date_of_birth*, gender*, grade*, section*, primary_contact*.'],
-            ['Dates', 'Use dd/mm/yyyy format (for example, 05/06/2015) or native Excel date cells. US mm/dd/yyyy format is rejected.'],
+            ['Required columns (*)', 'Columns marked with * are mandatory: admission_no*, admission_date*, name*, date_of_birth*, gender*, grade*, section*, primary_contact*. Enter your first student on Row 2 of the Students sheet.'],
+            ['Dates', 'Use dd/mm/yyyy format (for example, 05/06/2015 or 5/6/2015) or native Excel date cells. Do not mix formatted dates and text dates in the same column. US mm/dd/yyyy format is rejected.'],
             ['Primary contact', 'Allowed values: father, mother, guardian. The selected primary contact must have a valid 10-digit Indian mobile number (+91/0 prefix allowed).'],
             ['Siblings sharing guardians', 'Rows with the exact same guardian name and normalized mobile number are automatically linked to one guardian record. Parents sharing a mobile with different names stay separate records.'],
             ['Gender', implode(', ', array_map(static fn (Gender $case): string => $case->label(), Gender::cases()))],
             ['Blood group', implode(', ', array_map(static fn (BloodGroup $case): string => $case->value, BloodGroup::cases()))],
             ['Guardian relationship', implode(', ', array_map(static fn (GuardianRelationship $case): string => $case->value, GuardianRelationship::cases()))],
-            ['Upload limits', 'Maximum 1,000 student rows per upload, maximum file size 5 MB, formats XLSX or CSV. All rows must be valid before any student is imported.'],
+            ['Upload limits', 'Maximum 1,000 student rows per upload, maximum file size 5 MB, formats CSV UTF-8 or XLSX. All rows must be valid before any student is imported.'],
         ];
 
         if ($canViewSensitive) {
@@ -174,6 +177,14 @@ class BuildImportTemplate
         foreach ($activeGrades as $grade) {
             $sectionNames = $sectionsByGrade->get($grade->id)?->pluck('name')->implode(', ') ?: 'No sections configured for this year';
             $rows[] = [$grade->name, $sectionNames];
+        }
+
+        $rows[] = ['Example Student Row', 'Sample values (copy structure only onto Row 2+ of the Students sheet):'];
+        $exampleValues = $this->exampleRow($headers, $firstGrade, $firstSection);
+
+        foreach ($headers as $index => $header) {
+            $sampleValue = $exampleValues[$index] ?? '';
+            $rows[] = [$header, (string) $sampleValue];
         }
 
         return $rows;
@@ -193,20 +204,5 @@ class BuildImportTemplate
             ->orderByDesc('is_current')
             ->orderByDesc('starts_on')
             ->first();
-    }
-
-    /**
-     * Allocate a clean temporary .xlsx path in PHP's system temp directory.
-     */
-    private function allocateTempXlsxPath(): string
-    {
-        $base = tempnam(sys_get_temp_dir(), 'stu_tpl_');
-        $xlsxPath = $base.'.xlsx';
-
-        if (is_string($base) && file_exists($base)) {
-            @unlink($base);
-        }
-
-        return $xlsxPath;
     }
 }

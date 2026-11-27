@@ -68,6 +68,10 @@ class ValidateStudentImport
 
         $rowErrors = [];
         $parsedDrafts = [];
+        $dateFormatRows = [
+            'date_of_birth' => ['real' => [], 'text' => []],
+            'admission_date' => ['real' => [], 'text' => []],
+        ];
         $admissionOccurrences = [];
         $apaarOccurrences = [];
         $sectionRollOccurrences = [];
@@ -98,6 +102,11 @@ class ValidateStudentImport
 
             $dob = null;
             $rawDob = $cells['date_of_birth'] ?? null;
+            $dobKind = StudentImportColumns::classifyDateCellKind($rawDob);
+
+            if ($dobKind !== null) {
+                $dateFormatRows['date_of_birth'][$dobKind][] = $rowNumber;
+            }
 
             if (StudentImportColumns::normalizeCellString($rawDob) === null && ! $rawDob instanceof \DateTimeInterface) {
                 $addError('date_of_birth', __('Date of birth is required.'));
@@ -115,6 +124,11 @@ class ValidateStudentImport
 
             $admissionDate = null;
             $rawAdmissionDate = $cells['admission_date'] ?? null;
+            $admissionKind = StudentImportColumns::classifyDateCellKind($rawAdmissionDate);
+
+            if ($admissionKind !== null) {
+                $dateFormatRows['admission_date'][$admissionKind][] = $rowNumber;
+            }
 
             if (StudentImportColumns::normalizeCellString($rawAdmissionDate) === null && ! $rawAdmissionDate instanceof \DateTimeInterface) {
                 $addError('admission_date', __('Admission date is required.'));
@@ -350,6 +364,24 @@ class ValidateStudentImport
                         'message' => __('Duplicate roll number for this section within this file.'),
                     ];
                 }
+            }
+        }
+
+        // Guard against US-locale Excel converting half a date column into real Date cells while ambiguous dd/mm (>12) remain text.
+        foreach ($dateFormatRows as $dateColumn => $buckets) {
+            if ($buckets['real'] === [] || $buckets['text'] === []) {
+                continue;
+            }
+
+            $message = __('Dates in :column were read in two formats; your Excel may be set to US dates. Format the column as Text and re-type the dates as dd/mm/yyyy.', [
+                'column' => $dateColumn,
+            ]);
+
+            foreach (array_merge($buckets['real'], $buckets['text']) as $affectedRowNumber) {
+                $rowErrors[$affectedRowNumber][] = [
+                    'column' => $dateColumn,
+                    'message' => $message,
+                ];
             }
         }
 

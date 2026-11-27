@@ -258,17 +258,23 @@ test('screen supports downloading template, inspecting dry-run errors with formu
     $templateReader = SimpleExcelReader::create($downloadedTemplatePath, 'xlsx');
     expect($templateReader->getSheetNames())->toBe(['Students', 'Instructions']);
     $templateReader->close();
+    $templateDataRows = SimpleExcelReader::create($downloadedTemplatePath, 'xlsx')
+        ->fromSheetName('Students')
+        ->noHeaderRow()
+        ->getRows()
+        ->all();
+    expect($templateDataRows)->toHaveCount(1); // headers only, no fake child row
     @unlink($downloadedTemplatePath);
 
-    // 2. Upload spreadsheet with formula payload + validation error -> dryRun -> downloadErrorReport
+    // 2. Upload CSV spreadsheet with formula payload + validation error -> dryRun -> downloadErrorReport
     $headers = StudentImportColumns::templateHeaders(true);
-    $badUpload = makeScreenUploadFile('bad-students.xlsx', $headers, [
+    $badUpload = makeScreenUploadFile('bad-students.csv', $headers, [
         [
             '=1+1', '01/04/2026', 'CanaryBadName', '31/02/2015', 'Male',
             'Class 5', 'A', '1', 'Father One', '9876543210', '', '', '', '', '',
             'father', '', '', '', '', '', '', '', '', '', '', '', 'CanaryAadhaar',
         ],
-    ], 'xlsx');
+    ], 'csv');
 
     $errorComponent = Livewire::actingAs($admin)
         ->test(StudentsImport::class)
@@ -320,6 +326,18 @@ test('screen supports downloading template, inspecting dry-run errors with formu
     $uploadedFile = $lw->get('file');
     expect($uploadedFile)->toBeInstanceOf(TemporaryUploadedFile::class);
     $tempRealPath = $uploadedFile->getRealPath();
+    expect(file_exists($tempRealPath))->toBeTrue();
+
+    // Selecting a new file resets consent_confirmed automatically.
+    $lw->set('consent_confirmed', true)
+        ->set('file', $badUpload)
+        ->assertSet('consent_confirmed', false)
+        ->set('file', $goodUpload)
+        ->call('dryRun');
+
+    $refreshedFile = $lw->get('file');
+    expect($refreshedFile)->toBeInstanceOf(TemporaryUploadedFile::class);
+    $tempRealPath = $refreshedFile->getRealPath();
     expect(file_exists($tempRealPath))->toBeTrue();
 
     // Refuses confirm when DPDP consent box is unchecked
@@ -408,7 +426,7 @@ test('screen validates unsupported file extensions and enforces hourly confirm a
         ],
     ], 'csv');
 
-    // Dry-run limiter triggers after 30 hits in an hour
+    // Dry-run / parse limiter triggers after 30 hits across dryRun, downloadErrorReport, and confirmImport
     $dryRunKey = StudentsImport::dryRunRateLimitKey($school->id);
     RateLimiter::clear($dryRunKey);
     for ($i = 0; $i < StudentsImport::DRY_RUN_HOURLY_LIMIT; $i++) {
@@ -421,6 +439,38 @@ test('screen validates unsupported file extensions and enforces hourly confirm a
         ->set('file', $validUpload)
         ->call('dryRun')
         ->assertHasErrors(['file']);
+
+    Livewire::actingAs($admin)
+        ->test(StudentsImport::class)
+        ->set('academic_year_id', $structure['year']->id)
+        ->set('file', $validUpload)
+        ->call('downloadErrorReport')
+        ->assertHasErrors(['file']);
+
+    Livewire::actingAs($admin)
+        ->test(StudentsImport::class)
+        ->set('academic_year_id', $structure['year']->id)
+        ->set('file', $validUpload)
+        ->set('consent_confirmed', true)
+        ->call('confirmImport')
+        ->assertHasErrors(['file']);
+
+    // Verify calling downloadErrorReport on a fresh quota consumes a hit cleanly.
+    RateLimiter::clear($dryRunKey);
+    $badCsv = makeScreenUploadFile('bad-rl.csv', StudentImportColumns::templateHeaders(false), [
+        [
+            'RL-BAD', '01/04/2026', 'Name', '31/02/2015', 'Male',
+            'Class 5', 'A', '1', 'Father', '9876500001', '', '', '', '', '',
+            'father', '', '', '', '', '', '', '',
+        ],
+    ], 'csv');
+    Livewire::actingAs($admin)
+        ->test(StudentsImport::class)
+        ->set('academic_year_id', $structure['year']->id)
+        ->set('file', $badCsv)
+        ->call('downloadErrorReport')
+        ->assertFileDownloaded();
+    expect(RateLimiter::attempts($dryRunKey))->toBe(1);
 
     RateLimiter::clear($dryRunKey);
 
@@ -440,4 +490,48 @@ test('screen validates unsupported file extensions and enforces hourly confirm a
         ->assertHasErrors(['file']);
 
     expect(Student::query()->count())->toBe(0);
+});
+
+test('screen caps errorsList in snapshot at 100 entries while error report includes all rows', function () {
+    $school = School::factory()->active()->create();
+    $admin = createImportScreenMember($school, SchoolRole::Admin);
+    $structure = createImportScreenStructure($school);
+
+    $headers = StudentImportColumns::templateHeaders(false);
+    $rows = [];
+    for ($i = 1; $i <= 120; $i++) {
+        $rows[] = [
+            "BIG-{$i}", '01/04/2026', "Student {$i}", '31/02/2015', 'Male',
+            'Class 5', 'A', (string) $i, 'Father', '9876543210', '', '', '', '', '',
+            'father', '', '', '', '', '', '', '',
+        ];
+    }
+
+    $upload = makeScreenUploadFile('many-errors.csv', $headers, $rows, 'csv');
+
+    CurrentSchool::set($school);
+    setPermissionsTeamId($school->id);
+
+    $lw = Livewire::actingAs($admin)
+        ->test(StudentsImport::class)
+        ->set('academic_year_id', $structure['year']->id)
+        ->set('file', $upload)
+        ->call('dryRun')
+        ->assertSet('totalRows', 120)
+        ->assertSet('invalidCount', 120)
+        ->assertSet('totalErrorCount', 120)
+        ->assertSet('remainingErrorCount', 20)
+        ->assertSee('data-test="remaining-errors-notice"', false);
+
+    expect($lw->get('errorsList'))->toHaveCount(100);
+
+    $lw->call('downloadErrorReport')->assertFileDownloaded();
+    $reportPath = writeDownloadedXlsxFromEffect($lw);
+    $reportDetailRows = SimpleExcelReader::create($reportPath, 'xlsx')
+        ->fromSheetName('Error details')
+        ->getRows()
+        ->all();
+
+    expect($reportDetailRows)->toHaveCount(120);
+    @unlink($reportPath);
 });

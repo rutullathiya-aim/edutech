@@ -237,8 +237,9 @@ test('import template contains Students sheet, Instructions sheet with active gr
     $sheetNames = $reader->getSheetNames();
     $reader->close();
 
-    $studentsRows = SimpleExcelReader::create($templatePath, 'xlsx')
+    $studentsRawRows = SimpleExcelReader::create($templatePath, 'xlsx')
         ->fromSheetName('Students')
+        ->noHeaderRow()
         ->getRows()
         ->all();
 
@@ -251,13 +252,31 @@ test('import template contains Students sheet, Instructions sheet with active gr
     $flatInstructions = json_encode($instructionRows);
 
     expect($sheetNames)->toBe(['Students', 'Instructions'])
-        ->and($studentsRows)->toHaveCount(1)
-        ->and(array_keys($studentsRows[0]))->toContain('admission_no*', 'primary_contact*', 'aadhaar_last4')
-        ->and($flatInstructions)->toContain('Class 5')
-        ->and($flatInstructions)->toContain('A, B')
-        ->and($flatInstructions)->not->toContain('Archived Grade 9');
+        ->and($studentsRawRows)->toHaveCount(1) // headers only, no fake example student on Students sheet
+        ->and($studentsRawRows[0])->toContain('admission_no*', 'primary_contact*', 'aadhaar_last4')
+        ->and($flatInstructions)->toContain('Class 5', 'A, B', 'ADM-0001', 'Aarav Sharma')
+        ->and($flatInstructions)->not->toContain('Archived Grade 9')
+        ->and(str_starts_with($templatePath, StudentImportColumns::tempDirectory()))->toBeTrue();
+
+    // Importing the downloaded template unchanged must fail cleanly with "no student rows".
+    expect(fn () => (new ParseStudentImportFile)->handle($admin, $templatePath, 'xlsx'))
+        ->toThrow(ValidationException::class, 'no student rows');
 
     @unlink($templatePath);
+
+    // Temp cleanup prunes files older than 1 hour and keeps fresh files.
+    $staleTmp = StudentImportColumns::allocateTempXlsxPath('stale-check');
+    $freshTmp = StudentImportColumns::allocateTempXlsxPath('fresh-check');
+    file_put_contents($staleTmp, 'stale');
+    file_put_contents($freshTmp, 'fresh');
+    touch($staleTmp, time() - 7200);
+    touch($freshTmp, time() - 60);
+
+    expect(StudentImportColumns::pruneExpiredTempFiles(3600))->toBeGreaterThanOrEqual(1)
+        ->and(file_exists($staleTmp))->toBeFalse()
+        ->and(file_exists($freshTmp))->toBeTrue();
+
+    @unlink($freshTmp);
 
     // Clerk with StudentsImport permission only (without StudentsViewSensitive) omits sensitive columns.
     $limitedRole = Role::create([
@@ -274,12 +293,14 @@ test('import template contains Students sheet, Instructions sheet with active gr
     $clerk->unsetRelation('roles', 'permissions');
 
     $restrictedTemplatePath = (new BuildImportTemplate)->buildTempFile($clerk, $structure['year']->id);
-    $restrictedRows = SimpleExcelReader::create($restrictedTemplatePath, 'xlsx')
+    $restrictedRawRows = SimpleExcelReader::create($restrictedTemplatePath, 'xlsx')
         ->fromSheetName('Students')
+        ->noHeaderRow()
         ->getRows()
         ->all();
 
-    expect(array_keys($restrictedRows[0]))
+    expect($restrictedRawRows)->toHaveCount(1)
+        ->and($restrictedRawRows[0])
         ->not->toContain('social_category', 'religion', 'apaar_id', 'pen', 'aadhaar_last4');
 
     @unlink($restrictedTemplatePath);
@@ -333,24 +354,90 @@ test('valid XLSX import creates students, merges sibling guardians, keeps shared
     $rows = [
         // Row 2: Sibling 1 with Mahesh Iyer (reused from DB) and Kavita Iyer (mother sharing phone)
         [
-            'IMP-001', '01/04/2026', 'Ananya Iyer', '05/06/2015', 'Female', '5', 'a', '1',
-            'mahesh iyer', '9822223333', 'Kavita Iyer', '+91 98222 23333', '', '', '',
-            'father', 'o+', 'gujarat', 'General', 'Hindu', '100000000001', '10000000001', '1111',
-            $otherSchool->id, 'fake-id-1', 'old error',
+            'IMP-001',
+            '01/04/2026',
+            'Ananya Iyer',
+            '05/06/2015',
+            'Female',
+            '5',
+            'a',
+            '1',
+            'mahesh iyer',
+            '9822223333',
+            'Kavita Iyer',
+            '+91 98222 23333',
+            '',
+            '',
+            '',
+            'father',
+            'o+',
+            'gujarat',
+            'General',
+            'Hindu',
+            '100000000001',
+            '10000000001',
+            '1111',
+            $otherSchool->id,
+            'fake-id-1',
+            'old error',
         ],
         // Row 3: Sibling 2 sharing both Mahesh Iyer and Kavita Iyer
         [
-            'IMP-002', '01-04-2026', 'Rohan Iyer', '10.08.2016', 'Male', 'V', 'A', '2',
-            'Mahesh Iyer', '09822223333', 'kavita iyer', '919822223333', '', '', '',
-            'Mother', 'B+', 'Maharashtra', 'OBC', 'Hindu', '100000000002', '10000000002', '2222',
-            $otherSchool->id, 'fake-id-2', '',
+            'IMP-002',
+            '01-04-2026',
+            'Rohan Iyer',
+            '10.08.2016',
+            'Male',
+            'V',
+            'A',
+            '2',
+            'Mahesh Iyer',
+            '09822223333',
+            'kavita iyer',
+            '919822223333',
+            '',
+            '',
+            '',
+            'Mother',
+            'B+',
+            'Maharashtra',
+            'OBC',
+            'Hindu',
+            '100000000002',
+            '10000000002',
+            '2222',
+            $otherSchool->id,
+            'fake-id-2',
+            '',
         ],
-        // Row 4: Mother shares Deepak Nair's phone but has a different name -> new guardian record!
+        // Row 4: Mother shares Deepak Nair's phone with a different name -> new guardian record; 1-digit text date supported!
         [
-            'IMP-003', '02/04/2026', 'Meera Nair', 42160, 'Female', 'Std 5', 'B', '',
-            '', '', 'Lakshmi Nair', '9811112222', 'Uncle Raj', '9833334444', 'Other',
-            'mother', '', '', 'SC', '', '', '', '',
-            '', '', '',
+            'IMP-003',
+            '2/4/2026',
+            'Meera Nair',
+            '5/6/2015',
+            'Female',
+            'Std 5',
+            'B',
+            '',
+            '',
+            '',
+            'Lakshmi Nair',
+            '9811112222',
+            'Uncle Raj',
+            '9833334444',
+            'Other',
+            'mother',
+            '',
+            '',
+            'SC',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
         ],
     ];
 
@@ -390,9 +477,10 @@ test('valid XLSX import creates students, merges sibling guardians, keeps shared
         ->and($ananya->consent_recorded_at)->not->toBeNull()
         ->and($ananya->status)->toBe(StudentStatus::Active);
 
-    // Excel serial 42160 resolves strictly to 2015-06-05.
+    // Single-digit text dates (5/6/2015 and 2/4/2026) resolve cleanly as dd/mm/yyyy.
     expect($rohan->date_of_birth->toDateString())->toBe('2016-08-10')
-        ->and($meera->date_of_birth->toDateString())->toBe('2015-06-05');
+        ->and($meera->date_of_birth->toDateString())->toBe('2015-06-05')
+        ->and($meera->admission_date->toDateString())->toBe('2026-04-02');
 
     // Siblings share the exact same father (existing DB record) and mother (newly created once).
     $ananyaFather = $ananya->studentGuardians()->where('relationship', GuardianRelationship::Father)->firstOrFail();
@@ -571,7 +659,7 @@ test('validator collects all errors across all rows, flags within-file duplicate
     expect(Student::query()->count())->toBe(1) // only the seeded existingStudent
         ->and(Enrollment::query()->count())->toBe(1);
 
-    // Error report generation escapes all dangerous formula prefixes.
+    // Error report generation via CSV escapes all dangerous formula prefixes without relying on keepFormulas().
     $formulaPath = writeImportSpreadsheet($headers, [
         mapImportRow($headers, validImportRowMap([
             'name' => '=1+1',
@@ -582,9 +670,9 @@ test('validator collects all errors across all rows, flags within-file duplicate
             'mother_name' => "\r=CMD",
             'aadhaar_last4' => 'bad',
         ])),
-    ], 'xlsx');
+    ], 'csv');
 
-    $formulaParsed = (new ParseStudentImportFile)->handle($admin, $formulaPath, 'xlsx');
+    $formulaParsed = (new ParseStudentImportFile)->handle($admin, $formulaPath, 'csv');
     $formulaValidation = (new ValidateStudentImport)->handle($admin, $structure['year'], $formulaParsed);
     $reportPath = (new BuildImportErrorReport)->buildTempFile($admin, $formulaParsed, $formulaValidation);
 
@@ -887,4 +975,158 @@ test('import detects database changes made after dry run and imports zero record
         ->and(Student::query()->count())->toBe(1);
 
     @unlink($path);
+});
+
+test('XLSX formula cells use computed value instead of formula string and uncalculated formulas fail validation cleanly', function () {
+    $school = School::factory()->active()->create();
+    $admin = createImportActor($school, SchoolRole::Admin);
+    $structure = createImportSchoolStructure($school);
+
+    $headers = StudentImportColumns::templateHeaders(false);
+
+    // 1. Uncalculated formula cell written into name column must fail as missing/required name, never saving '=...'.
+    $uncalculatedPath = writeImportSpreadsheet($headers, [
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'FRM-001',
+            'name' => '=B2&" "&C2',
+        ])),
+    ], 'xlsx');
+
+    $parsedUncalculated = (new ParseStudentImportFile)->handle($admin, $uncalculatedPath, 'xlsx');
+    $validationUncalculated = (new ValidateStudentImport)->handle($admin, $structure['year'], $parsedUncalculated);
+
+    expect($validationUncalculated->isValid())->toBeFalse()
+        ->and($validationUncalculated->errors)->toHaveCount(1)
+        ->and($validationUncalculated->errors[0]['column'])->toBe('name')
+        ->and($validationUncalculated->errors[0]['message'])->toContain('required');
+
+    expect(fn () => app(ImportStudents::class)->handle($admin, $structure['year']->id, $uncalculatedPath, 'xlsx', true))
+        ->toThrow(ValidationException::class);
+
+    expect(Student::query()->count())->toBe(0);
+    @unlink($uncalculatedPath);
+
+    // 2. Calculated formula cell uses its evaluated cached value (<v>) when Excel saved a computed result.
+    $base = tempnam(sys_get_temp_dir(), 'imp_test_');
+    $calculatedPath = $base.'.xlsx';
+    if (is_string($base) && file_exists($base)) {
+        @unlink($base);
+    }
+
+    $writer = SimpleExcelWriter::create($calculatedPath, 'xlsx')->noHeaderRow();
+    $writer->addRow($headers);
+    $writer->addRow(mapImportRow($headers, validImportRowMap([
+        'admission_no' => 'FRM-002',
+        'name' => '=B2&" "&C2',
+    ])));
+    $writer->close();
+
+    // Inject Excel's cached formula result (t="str" + <v>Kavya Deshmukh</v>) into the worksheet XML (since OpenSpout writes <f> without <v>).
+    $zip = new ZipArchive;
+    expect($zip->open($calculatedPath))->toBeTrue();
+    $sheetXml = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+    $updatedXml = preg_replace(
+        '/<c r="([A-Z0-9]+)" s="([0-9]+)"><f>([^<]+)<\/f><\/c>/',
+        '<c r="$1" s="$2" t="str"><f>$3</f><v>Kavya Deshmukh</v></c>',
+        $sheetXml,
+        1,
+        $replacedCount,
+    );
+    expect($replacedCount)->toBe(1)
+        ->and($updatedXml)->toBeString();
+    $zip->addFromString('xl/worksheets/sheet1.xml', (string) $updatedXml);
+    $zip->close();
+
+    app(ImportStudents::class)->handle($admin, $structure['year']->id, $calculatedPath, 'xlsx', true);
+
+    $student = Student::query()->where('admission_no', 'FRM-002')->firstOrFail();
+    expect($student->name)->toBe('Kavya Deshmukh')
+        ->and(str_starts_with($student->name, '='))->toBeFalse();
+
+    @unlink($calculatedPath);
+});
+
+test('validator accepts uniform Excel real dates and rejects columns mixing real date cells and text dates', function () {
+    $school = School::factory()->active()->create();
+    $admin = createImportActor($school, SchoolRole::Admin);
+    $structure = createImportSchoolStructure($school);
+
+    $headers = StudentImportColumns::templateHeaders(false);
+
+    // 1. Uniform real Excel dates (DateTimeImmutable + Excel serial 42160) succeed.
+    $uniformRealPath = writeImportSpreadsheet($headers, [
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'DATE-R1',
+            'admission_date' => new DateTimeImmutable('2026-04-01'),
+            'date_of_birth' => new DateTimeImmutable('2015-06-05'),
+            'roll_number' => 1,
+        ])),
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'DATE-R2',
+            'admission_date' => new DateTimeImmutable('2026-04-02'),
+            'date_of_birth' => 42160, // Excel serial for 2015-06-05
+            'roll_number' => 2,
+        ])),
+    ], 'xlsx');
+
+    app(ImportStudents::class)->handle($admin, $structure['year']->id, $uniformRealPath, 'xlsx', true);
+    expect(Student::query()->where('admission_no', 'DATE-R2')->firstOrFail()->date_of_birth->toDateString())
+        ->toBe('2015-06-05');
+    @unlink($uniformRealPath);
+
+    // 2. Mixed real Excel Date cell + dd/mm/yyyy text string in date_of_birth rejects the column with US-date warning.
+    $mixedDobPath = writeImportSpreadsheet($headers, [
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'DATE-M1',
+            'admission_date' => '01/04/2026',
+            'date_of_birth' => new DateTimeImmutable('2015-05-06'),
+            'roll_number' => 3,
+        ])),
+        mapImportRow($headers, validImportRowMap([
+            'admission_no' => 'DATE-M2',
+            'admission_date' => '01/04/2026',
+            'date_of_birth' => '25/06/2015',
+            'roll_number' => 4,
+        ])),
+    ], 'xlsx');
+
+    $parsedMixed = (new ParseStudentImportFile)->handle($admin, $mixedDobPath, 'xlsx');
+    $validatedMixed = (new ValidateStudentImport)->handle($admin, $structure['year'], $parsedMixed);
+
+    expect($validatedMixed->isValid())->toBeFalse()
+        ->and(collect($validatedMixed->errors)->where('column', 'date_of_birth')->pluck('message')->implode(' '))
+        ->toContain('US dates');
+
+    @unlink($mixedDobPath);
+});
+
+test('parser rejects non-UTF-8 CSV bytes and spreadsheets exceeding 5000 physical rows', function () {
+    $school = School::factory()->active()->create();
+    $admin = createImportActor($school, SchoolRole::Admin);
+    createImportSchoolStructure($school);
+
+    // Windows-1252 / ISO-8859-1 encoded CSV must be rejected cleanly with save-as-UTF-8 guidance.
+    $ansiCsvPath = tempnam(sys_get_temp_dir(), 'imp_test_').'.csv';
+    file_put_contents(
+        $ansiCsvPath,
+        "admission_no*,admission_date*,name*,date_of_birth*,gender*,grade*,section*,father_name,father_mobile,primary_contact*\n"
+        ."ANSI-1,01/04/2026,Jos\xE9 Patel,05/06/2015,Male,Class 5,A,Father,9876543210,father\n",
+    );
+
+    expect(fn () => (new ParseStudentImportFile)->handle($admin, $ansiCsvPath, 'csv'))
+        ->toThrow(ValidationException::class, 'CSV UTF-8');
+    @unlink($ansiCsvPath);
+
+    // > 5,000 physical blank rows aborted before exhausting resources.
+    $blankCsvPath = tempnam(sys_get_temp_dir(), 'imp_test_').'.csv';
+    $handle = fopen($blankCsvPath, 'wb');
+    fwrite($handle, "admission_no*,admission_date*,name*,date_of_birth*,gender*,grade*,section*,primary_contact*\n");
+    for ($i = 0; $i < 5002; $i++) {
+        fwrite($handle, "   ,   ,   \n");
+    }
+    fclose($handle);
+
+    expect(fn () => (new ParseStudentImportFile)->handle($admin, $blankCsvPath, 'csv'))
+        ->toThrow(ValidationException::class, '5000');
+    @unlink($blankCsvPath);
 });

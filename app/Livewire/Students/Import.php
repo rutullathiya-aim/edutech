@@ -40,9 +40,14 @@ class Import extends Component
     use InteractsWithStudentScreens, WithFileUploads;
 
     /**
-     * Maximum dry-run validations allowed per school within one hour.
+     * Maximum validation parses (dry run, error report, or pre-confirm check) allowed per school within one hour.
      */
     public const int DRY_RUN_HOURLY_LIMIT = 30;
+
+    /**
+     * Maximum number of validation error items serialized into the Livewire component snapshot.
+     */
+    public const int MAX_DISPLAY_ERRORS = 100;
 
     public ?TemporaryUploadedFile $file = null;
 
@@ -62,8 +67,14 @@ class Import extends Component
     #[Locked]
     public int $invalidCount = 0;
 
+    #[Locked]
+    public int $totalErrorCount = 0;
+
+    #[Locked]
+    public int $remainingErrorCount = 0;
+
     /**
-     * Sanitized dry-run validation issues containing only row number, column key, and rule message.
+     * Sanitized preview of validation issues (capped to first 100 entries) with row, column key, and rule message.
      *
      * @var list<array{row: int, column: string, message: string}>
      */
@@ -84,12 +95,13 @@ class Import extends Component
     }
 
     /**
-     * Reset previous dry-run summary whenever the uploaded file changes.
+     * Reset previous dry-run summary and consent confirmation whenever the uploaded file changes.
      */
     public function updatedFile(): void
     {
+        $this->consent_confirmed = false;
         $this->resetDryRunState();
-        $this->resetValidation('file');
+        $this->resetValidation(['file', 'consent_confirmed']);
     }
 
     /**
@@ -117,7 +129,7 @@ class Import extends Component
     }
 
     /**
-     * Compute the rate-limit key for dry-run validation attempts per school.
+     * Compute the rate-limit key for spreadsheet validation parses per school.
      */
     public static function dryRunRateLimitKey(string $schoolId): string
     {
@@ -143,30 +155,9 @@ class Import extends Component
     public function dryRun(ParseStudentImportFile $parser, ValidateStudentImport $validator): void
     {
         $this->authorize('import', Student::class);
-
-        $actor = $this->actor();
-        $school = $this->school;
-
         $this->resetDryRunState();
 
-        $rateKey = self::dryRunRateLimitKey($school->id);
-
-        if (RateLimiter::tooManyAttempts($rateKey, self::DRY_RUN_HOURLY_LIMIT)) {
-            $retryMinutes = max(1, (int) ceil(RateLimiter::availableIn($rateKey) / 60));
-
-            throw ValidationException::withMessages([
-                'file' => __('Too many validation runs for this school. Try again in :minutes minute(s).', [
-                    'minutes' => $retryMinutes,
-                ]),
-            ]);
-        }
-
-        [$academicYear, $filePath, $extension] = $this->validateUploadAndYear();
-
-        RateLimiter::hit($rateKey, 3600);
-
-        $parsed = $parser->handle($actor, $filePath, $extension);
-        $result = $validator->handle($actor, $academicYear, $parsed);
+        [, , , , $result] = $this->validateAndInspectUpload($parser, $validator);
 
         $this->applyValidationResult($result);
     }
@@ -181,11 +172,7 @@ class Import extends Component
     ): ?StreamedResponse {
         $this->authorize('import', Student::class);
 
-        $actor = $this->actor();
-        [$academicYear, $filePath, $extension] = $this->validateUploadAndYear();
-
-        $parsed = $parser->handle($actor, $filePath, $extension);
-        $result = $validator->handle($actor, $academicYear, $parsed);
+        [, , , $parsed, $result] = $this->validateAndInspectUpload($parser, $validator);
 
         $this->applyValidationResult($result);
 
@@ -193,7 +180,7 @@ class Import extends Component
             return null;
         }
 
-        return $errorReportBuilder->toDownloadResponse($actor, $parsed, $result);
+        return $errorReportBuilder->toDownloadResponse($this->actor(), $parsed, $result);
     }
 
     /**
@@ -207,14 +194,23 @@ class Import extends Component
         $this->authorize('import', Student::class);
 
         $actor = $this->actor();
+        $confirmRateKey = ImportStudents::rateLimitKey($this->school->id);
 
-        [$academicYear, $filePath, $extension] = $this->validateUploadAndYear([
-            'consent_confirmed' => ['required', 'accepted'],
-        ]);
+        if (RateLimiter::tooManyAttempts($confirmRateKey, ImportStudents::HOURLY_LIMIT)) {
+            $retryMinutes = max(1, (int) ceil(RateLimiter::availableIn($confirmRateKey) / 60));
 
-        /** @var ParsedStudentImport $parsed */
-        $parsed = $parser->handle($actor, $filePath, $extension);
-        $validation = $validator->handle($actor, $academicYear, $parsed);
+            throw ValidationException::withMessages([
+                'file' => __('Too many student imports for this school. Try again in :minutes minute(s).', [
+                    'minutes' => $retryMinutes,
+                ]),
+            ]);
+        }
+
+        [$academicYear, $filePath, $extension, , $validation] = $this->validateAndInspectUpload(
+            $parser,
+            $validator,
+            ['consent_confirmed' => ['required', 'accepted']],
+        );
 
         if (! $validation->isValid()) {
             $this->applyValidationResult($validation);
@@ -263,6 +259,41 @@ class Import extends Component
     public function render(): View
     {
         return view('livewire.students.import');
+    }
+
+    /**
+     * Validate upload, check and consume one shared hourly parse quota hit, then parse and validate the spreadsheet.
+     *
+     * @param  array<string, list<string>>  $extraRules
+     * @return array{0: AcademicYear, 1: string, 2: string, 3: ParsedStudentImport, 4: StudentImportValidationResult}
+     */
+    private function validateAndInspectUpload(
+        ParseStudentImportFile $parser,
+        ValidateStudentImport $validator,
+        array $extraRules = [],
+    ): array {
+        $actor = $this->actor();
+        $school = $this->school;
+        $rateKey = self::dryRunRateLimitKey($school->id);
+
+        if (RateLimiter::tooManyAttempts($rateKey, self::DRY_RUN_HOURLY_LIMIT)) {
+            $retryMinutes = max(1, (int) ceil(RateLimiter::availableIn($rateKey) / 60));
+
+            throw ValidationException::withMessages([
+                'file' => __('Too many validation runs for this school. Try again in :minutes minute(s).', [
+                    'minutes' => $retryMinutes,
+                ]),
+            ]);
+        }
+
+        [$academicYear, $filePath, $extension] = $this->validateUploadAndYear($extraRules);
+
+        RateLimiter::hit($rateKey, 3600);
+
+        $parsed = $parser->handle($actor, $filePath, $extension);
+        $validation = $validator->handle($actor, $academicYear, $parsed);
+
+        return [$academicYear, $filePath, $extension, $parsed, $validation];
     }
 
     /**
@@ -321,15 +352,20 @@ class Import extends Component
     }
 
     /**
-     * Copy only sanitized validation counts and error locations into locked component properties.
+     * Copy sanitized validation counts and a 100-item preview of error locations into locked component properties.
      */
     private function applyValidationResult(StudentImportValidationResult $result): void
     {
+        $allErrors = $result->errors;
+        $totalErrors = count($allErrors);
+
         $this->hasDryRun = true;
         $this->totalRows = $result->totalRows;
         $this->validCount = $result->validRowCount;
         $this->invalidCount = $result->invalidRowCount;
-        $this->errorsList = $result->errors;
+        $this->totalErrorCount = $totalErrors;
+        $this->errorsList = array_slice($allErrors, 0, self::MAX_DISPLAY_ERRORS);
+        $this->remainingErrorCount = max(0, $totalErrors - self::MAX_DISPLAY_ERRORS);
     }
 
     /**
@@ -341,6 +377,8 @@ class Import extends Component
         $this->totalRows = 0;
         $this->validCount = 0;
         $this->invalidCount = 0;
+        $this->totalErrorCount = 0;
+        $this->remainingErrorCount = 0;
         $this->errorsList = [];
     }
 
