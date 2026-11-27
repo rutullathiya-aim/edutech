@@ -4,13 +4,13 @@ namespace App\Actions\Attendance;
 
 use App\Actions\Students\Import\StudentImportColumns;
 use App\Models\AcademicYear;
+use App\Models\AttendanceSession;
 use App\Models\Holiday;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -91,14 +91,13 @@ class AddHoliday
             }
 
             if (
-                Schema::hasTable('attendance_sessions')
-                && DB::table('attendance_sessions')
-                    ->where('school_id', $school->id)
-                    ->whereDate('date', $holidayDate->toDateString())
+                AttendanceSession::query()
+                    ->where('date', $holidayDate->toDateString())
+                    ->lockForUpdate()
                     ->exists()
             ) {
                 throw ValidationException::withMessages([
-                    'date' => __('Cannot mark a date with recorded attendance as a holiday.'),
+                    'date' => __('Cannot mark a date with recorded attendance as a holiday. Delete those attendance sessions first, or skip this date.'),
                 ]);
             }
 

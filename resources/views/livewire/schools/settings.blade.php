@@ -1,6 +1,6 @@
 <div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 py-4">
     <div class="space-y-1">
-        <flux:heading size="xl">{{ __('School settings') }}</flux:heading>
+        <flux:heading size="xl">{{ __('Attendance settings') }}</flux:heading>
         <flux:subheading>
             {{ __('Configure weekly off days and calendar settings for :school.', ['school' => $this->school->name]) }}
         </flux:subheading>

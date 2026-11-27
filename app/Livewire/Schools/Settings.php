@@ -16,7 +16,7 @@ use Livewire\Component;
  * @property-read School $school
  * @property-read array<int, string> $weekdayOptions
  */
-#[Title('School settings')]
+#[Title('Attendance settings')]
 class Settings extends Component
 {
     /**
@@ -70,6 +70,9 @@ class Settings extends Component
      */
     public function save(UpdateWeeklyOffDays $updateWeeklyOffDays): void
     {
+        $school = CurrentSchool::getOrFail();
+        $this->authorize('manageSettings', $school);
+
         $actor = auth()->user();
 
         if (! $actor instanceof User) {

@@ -141,4 +141,14 @@ class Section extends Model
     {
         return $this->hasMany(Enrollment::class);
     }
+
+    /**
+     * Get all attendance sessions recorded for this section.
+     *
+     * @return HasMany<AttendanceSession, $this>
+     */
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class);
+    }
 }

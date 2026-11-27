@@ -9,9 +9,12 @@ use App\Livewire\Schools\Settings as SchoolsSettings;
 use App\Livewire\Setup\Holidays as SetupHolidays;
 use App\Models\AcademicYear;
 use App\Models\Activity;
+use App\Models\AttendanceSession;
+use App\Models\Grade;
 use App\Models\Holiday;
 use App\Models\Membership;
 use App\Models\School;
+use App\Models\Section;
 use App\Models\User;
 use App\Tenant\CurrentSchool;
 use Carbon\CarbonImmutable;
@@ -318,8 +321,38 @@ test('AddHoliday and RemoveHoliday enforce attendance.manage, date bounds, uniqu
         ->assertNotFound();
 });
 
-test('AddHoliday rejects a date where attendance_sessions already exist')
-    ->todo('Cover attendance_sessions date conflict once Step 3 creates the attendance_sessions table.');
+test('AddHoliday rejects a date where attendance_sessions already exist', function () {
+    $school = School::factory()->active()->create();
+    $owner = createWorkingDaysMember($school, SchoolRole::Owner);
+
+    CurrentSchool::set($school);
+    setPermissionsTeamId($school->id);
+
+    $year = AcademicYear::factory()->for($school)->current()->create([
+        'starts_on' => '2026-04-01',
+        'ends_on' => '2027-03-31',
+    ]);
+    $grade = Grade::factory()->for($school)->create();
+    $section = Section::factory()->for($school)->for($year)->for($grade)->create(['name' => 'A']);
+
+    AttendanceSession::factory()
+        ->for($school)
+        ->for($year)
+        ->for($section)
+        ->create([
+            'date' => '2026-08-14',
+            'taken_by' => $owner->id,
+            'updated_by' => $owner->id,
+        ]);
+
+    $addHoliday = app(AddHoliday::class);
+
+    expect(fn () => $addHoliday->handle($owner, $year, '2026-08-14', 'Surprise Closure'))
+        ->toThrow(ValidationException::class);
+
+    $validHoliday = $addHoliday->handle($owner, $year, '2026-08-15', 'Independence Day');
+    expect($validHoliday->date->toDateString())->toBe('2026-08-15');
+});
 
 test('Settings and Holidays screens enforce route permissions, sidebar visibility, and full UI workflows', function () {
     $school = School::factory()->active()->create([
@@ -354,7 +387,7 @@ test('Settings and Holidays screens enforce route permissions, sidebar visibilit
     // Owner and Admin access both screens and see sidebar links.
     $this->actingAs($owner)->get($settingsUrl)
         ->assertOk()
-        ->assertSee('School settings')
+        ->assertSee('Attendance settings')
         ->assertSee('Asia/Kolkata')
         ->assertSee('Holidays');
 

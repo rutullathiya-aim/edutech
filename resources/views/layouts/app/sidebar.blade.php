@@ -117,7 +117,7 @@
                     :href="route('schools.settings', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
                     :current="request()->routeIs('schools.settings')"
                     wire:navigate>
-                    {{ __('School settings') }}
+                    {{ __('Attendance settings') }}
                 </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>

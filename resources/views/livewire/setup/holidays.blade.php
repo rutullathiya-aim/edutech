@@ -3,7 +3,7 @@
         <div class="space-y-1">
             <flux:heading size="xl">{{ __('Holidays') }}</flux:heading>
             <flux:subheading>
-                {{ __('Plan public and school holidays for each academic year. Weekly off days are managed in School settings.') }}
+                {{ __('Plan public and school holidays for each academic year. Weekly off days are managed in Attendance settings.') }}
             </flux:subheading>
         </div>
 
