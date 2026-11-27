@@ -6,8 +6,10 @@ use App\Livewire\Dashboard;
 use App\Livewire\Invitations\Accept as AcceptInvitationPage;
 use App\Livewire\Schools\Index as SchoolsIndex;
 use App\Livewire\Schools\Register as SchoolsRegister;
+use App\Livewire\Schools\Settings as SchoolsSettings;
 use App\Livewire\Setup\AcademicYears as SetupAcademicYears;
 use App\Livewire\Setup\Grades as SetupGrades;
+use App\Livewire\Setup\Holidays as SetupHolidays;
 use App\Livewire\Setup\Sections as SetupSections;
 use App\Livewire\Setup\Subjects as SetupSubjects;
 use App\Livewire\Staff\Index as StaffIndex;
@@ -18,7 +20,9 @@ use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Students\Show as StudentsShow;
 use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Holiday;
 use App\Models\Membership;
+use App\Models\School;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\Subject;
@@ -64,6 +68,14 @@ Route::prefix('{school}')
         Route::livewire('setup/subjects', SetupSubjects::class)
             ->can('viewAny', Subject::class)
             ->name('setup.subjects');
+
+        Route::livewire('setup/holidays', SetupHolidays::class)
+            ->can('viewAny', Holiday::class)
+            ->name('setup.holidays');
+
+        Route::livewire('settings', SchoolsSettings::class)
+            ->can('manageSettings', School::class)
+            ->name('schools.settings');
 
         Route::livewire('staff', StaffIndex::class)
             ->can('viewAny', Membership::class)

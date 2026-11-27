@@ -31,6 +31,7 @@ return new class extends Migration
             $table->timestamp('trial_ends_at')->nullable();
             $table->unsignedInteger('student_limit')->nullable();
             $table->json('settings')->nullable();
+            $table->json('weekly_off_days')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });

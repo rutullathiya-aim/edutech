@@ -6,6 +6,7 @@ use App\Casts\NormalizedEmail;
 use App\Enums\IndianState;
 use App\Enums\SchoolBoard;
 use App\Enums\SchoolStatus;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,6 +39,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property CarbonInterface|null $trial_ends_at
  * @property int|null $student_limit
  * @property array<string, mixed>|null $settings
+ * @property list<int>|null $weekly_off_days
  * @property CarbonInterface|null $created_at
  * @property CarbonInterface|null $updated_at
  * @property CarbonInterface|null $deleted_at
@@ -69,6 +71,7 @@ class School extends Model
         'status' => SchoolStatus::Trial,
         'timezone' => 'Asia/Kolkata',
         'locale' => 'en',
+        'weekly_off_days' => '[7]',
     ];
 
     /**
@@ -86,7 +89,78 @@ class School extends Model
             'trial_ends_at' => 'datetime',
             'student_limit' => 'integer',
             'settings' => 'array',
+            'weekly_off_days' => 'array',
         ];
+    }
+
+    /**
+     * Get all holidays configured for this school.
+     *
+     * @return HasMany<Holiday, $this>
+     */
+    public function holidays(): HasMany
+    {
+        return $this->hasMany(Holiday::class);
+    }
+
+    /**
+     * Get the current calendar date ("today") in the school's configured timezone.
+     */
+    public function today(): CarbonImmutable
+    {
+        $timezone = $this->timezone !== '' ? $this->timezone : 'Asia/Kolkata';
+
+        return CarbonImmutable::now($timezone)->startOfDay();
+    }
+
+    /**
+     * Normalize an array of ISO-8601 weekday numbers (1 = Monday .. 7 = Sunday) into a sorted unique list.
+     *
+     * @param  array<array-key, mixed>  $days
+     * @return list<int>
+     */
+    public static function normalizeWeeklyOffDays(array $days): array
+    {
+        $normalized = [];
+
+        foreach ($days as $day) {
+            if (is_int($day) && $day >= 1 && $day <= 7) {
+                $normalized[$day] = $day;
+            } elseif (is_string($day) && ctype_digit($day)) {
+                $intDay = (int) $day;
+
+                if ($intDay >= 1 && $intDay <= 7) {
+                    $normalized[$intDay] = $intDay;
+                }
+            }
+        }
+
+        $list = array_values($normalized);
+        sort($list);
+
+        return $list;
+    }
+
+    /**
+     * Get the configured weekly off ISO weekdays (1 = Monday .. 7 = Sunday), defaulting to [7] (Sunday).
+     *
+     * @return list<int>
+     */
+    public function weeklyOffDays(): array
+    {
+        if (! is_array($this->weekly_off_days)) {
+            return [7];
+        }
+
+        return self::normalizeWeeklyOffDays($this->weekly_off_days);
+    }
+
+    /**
+     * Determine whether the given date falls on one of the school's configured weekly off days.
+     */
+    public function isWeeklyOff(CarbonInterface $date): bool
+    {
+        return in_array($date->dayOfWeekIso, $this->weeklyOffDays(), true);
     }
 
     /**

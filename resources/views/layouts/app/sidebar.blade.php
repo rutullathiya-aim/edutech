@@ -29,6 +29,7 @@
                 || auth()->user()?->can('viewAny', \App\Models\Grade::class)
                 || auth()->user()?->can('viewAny', \App\Models\Section::class)
                 || auth()->user()?->can('viewAny', \App\Models\Subject::class)
+                || auth()->user()?->can('viewAny', \App\Models\Holiday::class)
             )
             <flux:sidebar.group :heading="__('School setup')" class="grid" data-test="school-setup-sidebar-group">
                 @can('viewAny', \App\Models\AcademicYear::class)
@@ -70,6 +71,16 @@
                     {{ __('Subjects') }}
                 </flux:sidebar.item>
                 @endcan
+
+                @can('viewAny', \App\Models\Holiday::class)
+                <flux:sidebar.item
+                    icon="calendar"
+                    :href="route('setup.holidays', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
+                    :current="request()->routeIs('setup.holidays')"
+                    wire:navigate>
+                    {{ __('Holidays') }}
+                </flux:sidebar.item>
+                @endcan
             </flux:sidebar.group>
             @endif
 
@@ -85,8 +96,12 @@
             </flux:sidebar.group>
             @endcan
 
-            @can('viewAny', \App\Models\Membership::class)
+            @if (
+                auth()->user()?->can('viewAny', \App\Models\Membership::class)
+                || auth()->user()?->can('manageSettings', \App\Tenant\CurrentSchool::get())
+            )
             <flux:sidebar.group :heading="__('Administration')" class="grid" data-test="staff-sidebar-group">
+                @can('viewAny', \App\Models\Membership::class)
                 <flux:sidebar.item
                     icon="users"
                     :href="route('staff.index', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
@@ -94,8 +109,19 @@
                     wire:navigate>
                     {{ __('Staff') }}
                 </flux:sidebar.item>
+                @endcan
+
+                @can('manageSettings', \App\Tenant\CurrentSchool::get())
+                <flux:sidebar.item
+                    icon="cog-6-tooth"
+                    :href="route('schools.settings', ['school' => \App\Tenant\CurrentSchool::idOrFail()])"
+                    :current="request()->routeIs('schools.settings')"
+                    wire:navigate>
+                    {{ __('School settings') }}
+                </flux:sidebar.item>
+                @endcan
             </flux:sidebar.group>
-            @endcan
+            @endif
             @endif
         </flux:sidebar.nav>
 

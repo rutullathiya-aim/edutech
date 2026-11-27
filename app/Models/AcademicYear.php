@@ -136,6 +136,16 @@ class AcademicYear extends Model
     }
 
     /**
+     * Get all school holidays recorded within this academic year.
+     *
+     * @return HasMany<Holiday, $this>
+     */
+    public function holidays(): HasMany
+    {
+        return $this->hasMany(Holiday::class);
+    }
+
+    /**
      * Determine whether the academic year has been closed.
      */
     public function isClosed(): bool
